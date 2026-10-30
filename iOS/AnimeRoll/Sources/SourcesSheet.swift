@@ -1,7 +1,7 @@
 import AnimeRollKit
 import SwiftUI
 
-/// Find a title on a source (StreamSite, Torrent, Telegram, Crunchyroll) and
+/// Find a title on a source (StreamSite, Torrent, Telegram, plugins) and
 /// send the download command to the NAS — or stream it right away (StreamSite).
 struct SourcesSheet: View {
     let title: String
@@ -17,7 +17,8 @@ struct SourcesSheet: View {
     @State private var results: [SourceSearchResult] = []
     @State private var searching = false
     @State private var error: String?
-    @State private var crunchyrollURL = ""
+    @State private var manualRef = ""
+    @State private var manualEpisode = ""
     @State private var sentMessage: String?
 
     var body: some View {
@@ -30,14 +31,17 @@ struct SourcesSheet: View {
                     if let hint = provider?.hint { Text(hint).font(.footnote).foregroundStyle(.secondary) }
                 }
 
-                if provider?.id == "crunchyroll" {
-                    Section("URL Crunchyroll") {
-                        TextField("https://www.crunchyroll.com/series/…", text: $crunchyrollURL)
-                            .keyboardType(.URL).textInputAutocapitalization(.never)
+                if let provider, !provider.canSearch {
+                    // Download-only sources (plugins): paste a link or reference.
+                    Section("Link o riferimento") {
+                        TextField("https://…", text: $manualRef)
+                            .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        TextField("Numero episodio (facoltativo)", text: $manualEpisode).keyboardType(.decimalPad)
                         Button("Scarica sul NAS", systemImage: "externaldrive.badge.plus") {
-                            send(source: "crunchyroll", items: [DownloadItem(sourceRef: crunchyrollURL, episodeNumber: nil)])
+                            send(source: provider.id, items: [DownloadItem(sourceRef: manualRef.trimmingCharacters(in: .whitespaces),
+                                                                          episodeNumber: Double(manualEpisode.replacingOccurrences(of: ",", with: ".")))])
                         }
-                        .disabled(!crunchyrollURL.contains("crunchyroll.com"))
+                        .disabled(!refIsValid(provider))
                     }
                 } else {
                     Section {
@@ -89,6 +93,13 @@ struct SourcesSheet: View {
         Button("Scarica sul NAS", systemImage: "externaldrive.badge.plus") {
             send(source: provider!.id, items: [DownloadItem(sourceRef: r.ref, episodeNumber: nil)])
         }
+    }
+
+    private func refIsValid(_ p: ProviderInfo) -> Bool {
+        let ref = manualRef.trimmingCharacters(in: .whitespaces)
+        guard !ref.isEmpty else { return false }
+        guard let pattern = p.refPattern else { return true }
+        return ref.range(of: pattern, options: .regularExpression) != nil
     }
 
     private func search() async {

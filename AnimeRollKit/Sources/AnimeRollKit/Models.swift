@@ -113,6 +113,9 @@ public struct ProviderInfo: Codable, Hashable, Identifiable, Sendable {
     public let canListEpisodes: Bool
     public let canStream: Bool
     public let hint: String?
+    /// Regex a pasted reference must match (download-only plugins).
+    public let refPattern: String?
+    public let isPlugin: Bool?
 }
 
 public struct SourceSearchResult: Codable, Hashable, Identifiable, Sendable {
