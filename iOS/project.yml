@@ -1,0 +1,49 @@
+# Generate the Xcode project with:  xcodegen generate
+name: AnimeRoll
+options:
+  xcodeVersion: "27.2"   # built with Xcode 27.2 (iOS/tvOS 27.2 SDK); deployment target stays 18.0
+  bundleIdPrefix: com.kurozetsubou.animeroll
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    DEVELOPMENT_TEAM: ""          # set your Apple Team ID
+packages:
+  AnimeRollKit:
+    path: ../AnimeRollKit
+targets:
+  AnimeRoll:
+    type: application
+    platform: iOS
+    sources: [AnimeRoll]
+    dependencies:
+      - package: AnimeRollKit
+    entitlements:
+      path: AnimeRoll/AnimeRoll.entitlements
+      properties:
+        com.apple.developer.associated-domains:
+          - webcredentials:anime.example.com   # your NAS domain (passkeys)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kurozetsubou.animeroll
+        TARGETED_DEVICE_FAMILY: "1,2"          # iPhone (incl. iPhone Duo) + iPad
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        GENERATE_INFOPLIST_FILE: YES
+    info:
+      path: AnimeRoll/Info.plist
+      properties:
+        CFBundleDisplayName: AnimeRoll
+        UIBackgroundModes: [audio, fetch]
+        UIApplicationSupportsMultipleScenes: true
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true      # http:// on the LAN while testing
+        CFBundleURLTypes:
+          - CFBundleURLSchemes: [animeroll]
+        NSLocalNetworkUsageDescription: "AnimeRoll si collega al tuo NAS sulla rete locale."
