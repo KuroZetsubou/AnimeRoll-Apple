@@ -9,13 +9,16 @@ import SwiftUI
 /// - Wide screens (Duo flat, iPad landscape): episode list next to the video, like Netflix on foldables.
 struct PlayerScreen: View {
     let item: PlaybackItem
+    /// Opened from "schermo intero": one big video, ignoring the fold.
+    var startFullScreen = false
     var body: some View {
-        PlayerScreenContent(item: item).trackingFoldPosture()
+        PlayerScreenContent(item: item, startFullScreen: startFullScreen).trackingFoldPosture()
     }
 }
 
 private struct PlayerScreenContent: View {
     let item: PlaybackItem
+    init(item: PlaybackItem, startFullScreen: Bool) { self.item = item; _fullScreen = State(initialValue: startFullScreen) }
     @Environment(AppSession.self) private var session
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var hSize
@@ -23,20 +26,23 @@ private struct PlayerScreenContent: View {
     @State private var model: PlayerModel?
     @State private var showEpisodes = true
     @State private var pip = PiPHolder()
+    /// Full screen: one big video ignoring the fold; the half-open layouts are one tap away.
+    @State private var fullScreen = false
 
     private var isEpisode: Bool { if case .episode = item { true } else { false } }
 
     var body: some View {
         GeometryReader { geo in
             Group {
-                switch posture {
+                if fullScreen { standard(geo.size) } else { switch posture {
                 case .tabletop: tabletop(geo.size)
                 // Book layout only when each page is wide enough for its content.
                 case .book where geo.size.width >= 600: book(geo.size)
                 default: standard(geo.size)
-                }
+                } }
             }
         }
+        .animation(DS.base, value: fullScreen)
         .background(.black)
         .overlay { if let model { LoadingOverlay(model: model) } else { ProgressView().controlSize(.large).tint(.white) } }
         .statusBarHidden()
@@ -61,7 +67,7 @@ private struct PlayerScreenContent: View {
             }
             .frame(height: size.height / 2)
             if let model {
-                TabletopControls(model: model, showEpisodes: isEpisode, close: close)
+                TabletopControls(model: model, showEpisodes: isEpisode, close: close, expand: { fullScreen = true })
                     .frame(height: size.height / 2)
             }
         }
@@ -81,13 +87,14 @@ private struct PlayerScreenContent: View {
                     closeButton
                     Spacer()
                     if let model { SubtitleMenu(controller: model.subtitles) }
+                    fullScreenButton(expand: true)
                 }
                 .padding()
             }
             .frame(width: size.width / 2)
             if let model {
                 if isEpisode { EpisodePanel(model: model).frame(width: size.width / 2) }
-                else { TabletopControls(model: model, showEpisodes: false, close: close).frame(width: size.width / 2) }
+                else { TabletopControls(model: model, showEpisodes: false, close: close, expand: { fullScreen = true }).frame(width: size.width / 2) }
             }
         }
     }
@@ -104,6 +111,9 @@ private struct PlayerScreenContent: View {
                 }
             }
             .overlay(alignment: .topTrailing) {
+                if posture.isHalfOpen && fullScreen { fullScreenButton(expand: false).padding(.top, 70).padding(.trailing, wide && isEpisode ? 76 : 20) }
+            }
+            .overlay(alignment: .topTrailing) {
                 if wide, isEpisode {
                     Button { withAnimation(DS.base) { showEpisodes.toggle() } } label: {
                         Image(systemName: "sidebar.right").font(.headline).frame(width: 44, height: 44).glassCircle()
@@ -118,6 +128,15 @@ private struct PlayerScreenContent: View {
         }
     }
 
+    /// Full screen on / off: the video takes the whole display regardless of the fold.
+    private func fullScreenButton(expand: Bool) -> some View {
+        Button { Haptics.tick(); fullScreen = expand } label: {
+            Image(systemName: expand ? "arrow.up.left.and.arrow.down.right" : "arrow.down.right.and.arrow.up.left")
+                .font(.headline).frame(width: 44, height: 44).glassCircle()
+        }
+        .buttonStyle(.plain).accessibilityLabel(expand ? "Schermo intero" : "Esci dallo schermo intero")
+    }
+
     private var closeButton: some View {
         Button(action: close) {
             Image(systemName: "xmark").font(.headline).padding(10).background(.ultraThinMaterial, in: .circle)
@@ -125,64 +144,94 @@ private struct PlayerScreenContent: View {
     }
 }
 
-/// Big touch controls for the lower half in tabletop posture.
+/// Touch controls for the lower half in tabletop posture. Everything is centred in the half:
+/// title row on top (clear of the fold), then big transport buttons in the middle, the scrubber
+/// under them, and the quick actions (skip intro, next episode) at the bottom.
 private struct TabletopControls: View {
     let model: PlayerModel
     let showEpisodes: Bool
     let close: () -> Void
+    var expand: (() -> Void)? = nil
     @State private var scrubbing: Double?
 
     var body: some View {
-        VStack(spacing: 14) {
-            HStack {
+        VStack(spacing: 0) {
+            // Title and the two round buttons.
+            HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(model.title).font(DS.display(20, 800)).lineLimit(1)
-                    Text(model.subtitle).font(DS.body(13)).foregroundStyle(DS.textSecondary).lineLimit(1)
+                    Text(model.title).font(DS.display(22, 800)).lineLimit(1)
+                    Text(model.subtitle).font(DS.body(14)).foregroundStyle(DS.textSecondary).lineLimit(1)
                 }
-                Spacer()
+                Spacer(minLength: 8)
                 SubtitleMenu(controller: model.subtitles)
-                Button(action: close) { Image(systemName: "xmark").font(.headline).padding(10).background(Theme.card, in: .circle) }
+                if let expand {
+                    Button { Haptics.tick(); expand() } label: {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right").font(.headline).frame(width: 44, height: 44).background(DS.surface, in: .circle)
+                    }
+                    .buttonStyle(.plain).accessibilityLabel("Schermo intero")
+                }
+                Button(action: close) {
+                    Image(systemName: "xmark").font(.headline).frame(width: 44, height: 44).background(DS.surface, in: .circle)
+                }
+                .buttonStyle(.plain).accessibilityLabel("Chiudi")
             }
+            .padding(.top, 32)
 
+            Spacer(minLength: 16)
+
+            // Transport, centred.
+            HStack(spacing: 40) {
+                Button { Haptics.tick(); model.skip(seconds: -10) } label: {
+                    Image(systemName: "gobackward.10").font(.title.weight(.semibold)).frame(width: 68, height: 68).glassCircle()
+                }
+                .buttonStyle(.plain).accessibilityLabel("Indietro 10 secondi")
+                Button { Haptics.tick(); model.togglePlayPause() } label: {
+                    TimelineView(.periodic(from: .now, by: 0.3)) { _ in
+                        Image(systemName: model.player.rate == 0 ? "play.fill" : "pause.fill").font(.system(size: 38, weight: .bold))
+                            .foregroundStyle(DS.onAccent).frame(width: 92, height: 92)
+                            .background(DS.accent, in: .circle).shadow(color: DS.accent.opacity(0.45), radius: 26)
+                    }
+                }
+                .buttonStyle(.plain).accessibilityLabel("Riproduci o pausa")
+                Button { Haptics.tick(); model.skip(seconds: 10) } label: {
+                    Image(systemName: "goforward.10").font(.title.weight(.semibold)).frame(width: 68, height: 68).glassCircle()
+                }
+                .buttonStyle(.plain).accessibilityLabel("Avanti 10 secondi")
+            }
+            .foregroundStyle(.white)
+
+            Spacer(minLength: 20)
+
+            // Scrubber with elapsed / remaining time.
             TimelineView(.periodic(from: .now, by: 0.5)) { _ in
                 let duration = model.player.currentItem?.duration.seconds ?? 0
                 let current = scrubbing ?? model.player.currentTime().seconds
-                VStack(spacing: 2) {
+                VStack(spacing: 4) {
                     Scrubber(value: current.isFinite ? current : 0, duration: duration.isFinite ? duration : 0) { scrubbing = $0 } onEnd: { t in
                         model.player.seek(to: CMTime(seconds: t, preferredTimescale: 600))
                         scrubbing = nil
                     }
                     HStack {
-                        Text(timeLabel(current)); Spacer(); Text("-" + timeLabel(max(0, duration - current)))
+                        Text(timeLabel(current)); Spacer(); Text("-" + timeLabel(max(0, duration - current))).foregroundStyle(DS.textSecondary)
                     }
-                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    .font(DS.body(13, 600).monospacedDigit())
                 }
             }
 
-            HStack(spacing: 36) {
-                Button { model.skip(seconds: -10) } label: { Image(systemName: "gobackward.10") }
-                Button { model.togglePlayPause() } label: {
-                    TimelineView(.periodic(from: .now, by: 0.3)) { _ in
-                        Image(systemName: model.player.rate == 0 ? "play.fill" : "pause.fill").font(.system(size: 28, weight: .bold))
-                            .foregroundStyle(DS.onAccent).frame(width: 64, height: 64)
-                            .background(DS.accent, in: .circle).shadow(color: DS.accent.opacity(0.4), radius: 20)
-                    }
+            // Quick actions.
+            HStack(spacing: 12) {
+                Button { Haptics.tick(); model.skip(seconds: 85) } label: { Label("Salta sigla", systemImage: "forward.fill") }
+                    .buttonStyle(GhostButtonStyle())
+                Spacer()
+                if showEpisodes, let next = model.nextEpisode {
+                    Button { Task { await model.playNext() } } label: { Label("Episodio \(next.numberLabel)", systemImage: "forward.end.fill") }
+                        .buttonStyle(PrimaryButtonStyle(small: true))
                 }
-                Button { model.skip(seconds: 85) } label: { Image(systemName: "forward.end.alt") } // salta sigla
-                Button { model.skip(seconds: 10) } label: { Image(systemName: "goforward.10") }
             }
-            .font(.title)
-            .foregroundStyle(.white)
-
-            if showEpisodes, let next = model.nextEpisode {
-                Button { Task { await model.playNext() } } label: {
-                    Label("Episodio \(next.numberLabel)", systemImage: "forward.end.fill")
-                }
-                .buttonStyle(PrimaryButtonStyle())
-            }
-            Spacer(minLength: 0)
+            .padding(.top, 18).padding(.bottom, 24)
         }
-        .padding(20)
+        .padding(.horizontal, 28)
+        .frame(maxHeight: .infinity)
         .background(Theme.background)
     }
 
@@ -197,6 +246,8 @@ private struct TabletopControls: View {
 struct InlinePlayer: View {
     let item: PlaybackItem
     let close: () -> Void
+    /// "Schermo intero": stops this player and reopens the episode full screen, ignoring the fold.
+    var expand: (() -> Void)? = nil
     @Environment(AppSession.self) private var session
     @State private var model: PlayerModel?
 
@@ -211,6 +262,12 @@ struct InlinePlayer: View {
             }
             HStack(spacing: 8) {
                 if let model { SubtitleMenu(controller: model.subtitles, compact: true) }
+                if let expand {
+                    Button { Task { await model?.stop(); expand() } } label: {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right").padding(8).background(.ultraThinMaterial, in: .circle)
+                    }
+                    .accessibilityLabel("Schermo intero")
+                }
                 Button { Task { await model?.stop(); close() } } label: {
                     Image(systemName: "xmark").padding(8).background(.ultraThinMaterial, in: .circle)
                 }

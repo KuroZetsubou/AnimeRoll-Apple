@@ -67,22 +67,13 @@ struct RootView: View {
 struct MainView: View {
     @Environment(AppSession.self) private var session
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.horizontalSizeClass) private var hSize
     @Environment(\.foldPosture) private var posture
     @State private var tab: AppTab = .home
-    @State private var width: CGFloat = 0
     @State private var tabBarHidden = false
 
-    /// iPhone Duo: two panes only half open (split on the crease). Fully open it is one big
-    /// canvas: the catalog takes the whole screen and titles open as a modal; closed it is a phone.
-    /// Devices without a hinge (iPad, landscape phones) keep two panes on wide screens.
-    private var twoPanes: Bool {
-        switch posture {
-        case .closed, .flat: return false
-        case .book, .tabletop: return true
-        case .none: return hSize == .regular || width >= 640
-        }
-    }
+    /// Two panes only on a half-open iPhone Duo, split on the fold. Everywhere else (iPad, iPhone,
+    /// Duo open or closed) the catalog takes the whole screen and a title opens as a modal over it.
+    private var twoPanes: Bool { posture == .book || posture == .tabletop }
 
     enum AppTab: Hashable { case home, explore, library, downloads, profile }
 
@@ -106,7 +97,6 @@ struct MainView: View {
         .tabViewStyle(.sidebarAdaptable)
         .onChange(of: tab) { _, _ in Haptics.tick(); tabBarHidden = false }
         .modifier(TitleSheetHost())
-        .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
         .onAppear { DS.registerFonts(); if session.isOffline { tab = .downloads } }
         .onReceive(NotificationCenter.default.publisher(for: .showDownloads)) { _ in tab = .downloads }
         .onChange(of: scenePhase) { _, phase in

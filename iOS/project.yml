@@ -24,9 +24,11 @@ targets:
       - package: AnimeRollKit
     entitlements:
       path: AnimeRoll/AnimeRoll.entitlements
-      properties:
-        com.apple.developer.associated-domains:
-          - webcredentials:anime.example.com   # your NAS domain (passkeys)
+      # No capabilities by default, so any Apple account can sign it (free "Personal Team" included).
+      # Passkeys need a paid developer account: add, under `properties:`,
+      #   com.apple.developer.associated-domains: ["webcredentials:YOUR-NAS-DOMAIN"]
+      # then run `xcodegen generate` again. See README.
+      properties: {}
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kurozetsubou.animeroll

@@ -83,6 +83,7 @@ struct TitleDetailView: View {
     @State private var model: TitleModel
     @State private var playing: PlaybackItem?
     @State private var inlineItem: PlaybackItem?
+    @State private var fullScreenItem: PlaybackItem?
     @State private var showSources = false
     @State private var expanded = false
     @State private var section = 0
@@ -127,6 +128,7 @@ struct TitleDetailView: View {
         .task { await model.load(session.api) }
         .refreshable { await model.load(session.api) }
         .fullScreenCover(item: $playing, onDismiss: { Task { await model.load(session.api) } }) { PlayerScreen(item: $0) }
+        .fullScreenCover(item: $fullScreenItem, onDismiss: { Task { await model.load(session.api) } }) { PlayerScreen(item: $0, startFullScreen: true) }
         .confirmationDialog("Eliminare l'episodio dal NAS?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
             Button("Elimina episodio \(deleting?.numberLabel ?? "")", role: .destructive) {
                 guard let ep = deleting else { return }
@@ -168,7 +170,8 @@ struct TitleDetailView: View {
 
     @ViewBuilder private var header: some View {
         if let inlineItem {
-            InlinePlayer(item: inlineItem) { self.inlineItem = nil; Task { await model.load(session.api) } }
+            InlinePlayer(item: inlineItem, close: { self.inlineItem = nil; Task { await model.load(session.api) } },
+                         expand: { self.inlineItem = nil; fullScreenItem = inlineItem })
                 .aspectRatio(16 / 9, contentMode: .fit)
                 .id(inlineItem.id)
         } else {

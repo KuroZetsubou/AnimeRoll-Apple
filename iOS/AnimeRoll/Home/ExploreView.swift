@@ -84,17 +84,19 @@ struct ExploreView: View {
         }
         .sheet(isPresented: $picker) {
             SeasonPicker(season: season, year: year) { season = $0; year = $1; picker = false }
-                .presentationDetents(hSize == .compact ? [.large] : [.medium])
+                .presentationDetents([.large])
                 .presentationBackground(DS.background)
         }
     }
 
+    /// Season + year picker. Both columns scroll (years go back to 1960); "Mostra" stays pinned at the bottom,
+    /// so it is always reachable, on the phone as on the open iPhone Duo or iPad.
     private struct SeasonPicker: View {
         @State var season: Int
         @State var year: Int
         let apply: (Int, Int) -> Void
         init(season: Int, year: Int, apply: @escaping (Int, Int) -> Void) { _season = State(initialValue: season); _year = State(initialValue: year); self.apply = apply }
-        private var years: [Int] { let y = Calendar.current.component(.year, from: .now); return Array((y - 4...y + 1).reversed()) }
+        private var years: [Int] { let y = Calendar.current.component(.year, from: .now); return Array((1960...(y + 1)).reversed()) }
 
         var body: some View {
             VStack(alignment: .leading, spacing: 16) {
@@ -103,25 +105,36 @@ struct ExploreView: View {
                     column("Stagione", ExploreView.seasons.indices.map { ($0, ExploreView.seasons[$0].name) }, selected: season) { season = $0 }
                     column("Anno", years.map { ($0, "\($0)") }, selected: year) { year = $0 }
                 }
-                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .safeAreaInset(edge: .bottom) {
                 Button { apply(season, year) } label: { Text("Mostra \(ExploreView.seasons[season].name) \(String(year))") }
                     .buttonStyle(PrimaryButtonStyle())
+                    .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 8)
+                    .background(DS.background)
             }
-            .padding(.horizontal, 16).padding(.bottom, 16)
         }
 
         private func column(_ title: String, _ options: [(Int, String)], selected: Int, pick: @escaping (Int) -> Void) -> some View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(title.uppercased()).font(DS.body(12, 700)).tracking(1).foregroundStyle(DS.textTertiary).padding(.leading, 4)
-                ForEach(options, id: \.0) { id, name in
-                    let on = id == selected
-                    Button { Haptics.tick(); pick(id) } label: {
-                        HStack { Text(name).font(DS.body(16, 600)); Spacer(); if on { Image(systemName: "checkmark") } }
-                            .foregroundStyle(on ? DS.accent : .white).padding(.horizontal, 16).frame(height: 52)
-                            .background(on ? DS.accentSoft : DS.surface, in: .rect(cornerRadius: DS.rCard))
-                            .overlay(RoundedRectangle(cornerRadius: DS.rCard).strokeBorder(on ? DS.accent : DS.hairline))
+                ScrollViewReader { proxy in
+                    ScrollView(showsIndicators: false) {
+                        VStack(spacing: 6) {
+                            ForEach(options, id: \.0) { id, name in
+                                let on = id == selected
+                                Button { Haptics.tick(); pick(id) } label: {
+                                    HStack { Text(name).font(DS.body(16, 600)); Spacer(); if on { Image(systemName: "checkmark") } }
+                                        .foregroundStyle(on ? DS.accent : .white).padding(.horizontal, 16).frame(height: 52)
+                                        .background(on ? DS.accentSoft : DS.surface, in: .rect(cornerRadius: DS.rCard))
+                                        .overlay(RoundedRectangle(cornerRadius: DS.rCard).strokeBorder(on ? DS.accent : DS.hairline))
+                                }
+                                .buttonStyle(.plain).id(id)
+                            }
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .onAppear { proxy.scrollTo(selected, anchor: .center) }
                 }
             }
             .frame(maxWidth: .infinity)

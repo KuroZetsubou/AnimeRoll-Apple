@@ -302,7 +302,7 @@ struct TVExploreView: View {
                     HStack(spacing: 16) {
                         ForEach(Self.seasons.indices, id: \.self) { i in TVChip(title: Self.seasons[i].0, selected: i == season) { season = i } }
                         Divider().frame(height: 50)
-                        ForEach([year + 1, year, year - 1, year - 2].uniqued(), id: \.self) { y in TVChip(title: String(y), selected: y == year) { year = y } }
+                        ForEach(Array((1960...(Calendar.current.component(.year, from: .now) + 1)).reversed()), id: \.self) { y in TVChip(title: String(y), selected: y == year) { year = y } }
                     }
                     .padding(.vertical, 8)
                 }
@@ -345,8 +345,4 @@ struct TVExploreView: View {
             catch { self.error = error.localizedDescription; items = [] }
         }
     }
-}
-
-private extension Array where Element: Hashable {
-    func uniqued() -> [Element] { var seen = Set<Element>(); return filter { seen.insert($0).inserted } }
 }
