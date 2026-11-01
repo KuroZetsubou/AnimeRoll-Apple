@@ -277,3 +277,19 @@ public enum TitleRef: Hashable, Sendable {
         switch self { case .series(let s): s.aniListId; case .aniList(let m): m.id }
     }
 }
+
+public extension SeriesDTO {
+    /// The server stores genres as "Action, Drama".
+    var genreList: [String] {
+        (genres ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+}
+
+/// Space on the NAS disk: what is free, what the library takes, and the reserve the server always keeps free.
+public struct StorageInfo: Codable, Sendable, Equatable {
+    public let totalBytes: Int64
+    public let freeBytes: Int64
+    public let libraryBytes: Int64
+    public let reserveBytes: Int64
+    public var usedBytes: Int64 { max(0, totalBytes - freeBytes) }
+}

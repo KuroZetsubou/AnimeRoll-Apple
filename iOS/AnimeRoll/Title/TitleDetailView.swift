@@ -33,6 +33,13 @@ final class TitleModel {
         } catch { self.error = error.localizedDescription }
     }
 
+    /// After deleting from the NAS: drop it locally; with no episodes left the series is gone too.
+    func removed(episode id: Int) {
+        episodes.removeAll { $0.id == id }
+        if episodes.isEmpty { series = nil }
+    }
+    func removedSeries() { episodes = []; series = nil }
+
     var title: String { media?.title ?? series?.title ?? ref.title }
     var description: String {
         (media?.plainDescription ?? series?.description ?? "")
@@ -40,22 +47,19 @@ final class TitleModel {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Titles sharing a genre, from the NAS library and the home's trending/seasonal lists
-    /// (there is no recommendations endpoint).
+    /// "Simili": AniList's own recommendations, with the NAS version of a title when we have it.
     var similar: [TitleRef] = []
+    var similarLoaded = false
     func loadSimilar(_ api: APIClient) async {
-        guard similar.isEmpty else { return }
-        let mine = Set(media?.genres ?? series?.genreList ?? [])
-        guard !mine.isEmpty else { return }
+        guard !similarLoaded, let alId = ref.aniListId ?? media?.id else { similarLoaded = true; return }
+        async let rec = try? api.aniListRecommendations(alId)
         async let lib = try? api.library()
-        async let home = try? api.home()
-        let (l, h) = await (lib, home)
-        let nas = (l ?? []).filter { $0.id != series?.id && !mine.isDisjoint(with: $0.genreList) }.map(TitleRef.series)
-        let nasAniList = Set((l ?? []).compactMap(\.aniListId))
-        let al = ((h?.trending ?? []) + (h?.seasonal ?? []))
-            .filter { $0.id != ref.aniListId && !nasAniList.contains($0.id) && !mine.isDisjoint(with: $0.genres) }
+        let (r, l) = await (rec, lib)
+        // Two NAS series can share one AniList id: keep the first instead of crashing.
+        let onNAS = Dictionary((l ?? []).compactMap { s in s.aniListId.map { ($0, s) } }, uniquingKeysWith: { first, _ in first })
         var seen = Set<Int>()
-        similar = nas + al.filter { seen.insert($0.id).inserted }.map(TitleRef.aniList)
+        similar = (r ?? []).filter { $0.id != alId && seen.insert($0.id).inserted }.map { m in onNAS[m.id].map(TitleRef.series) ?? .aniList(m) }
+        similarLoaded = true
     }
 
     /// First not-completed episode, for the big "Riproduci" button.
@@ -85,6 +89,9 @@ struct TitleDetailView: View {
     @State private var zoomed = false
     @State private var showStatus = false
     @State private var showAll = false
+    @State private var deleting: EpisodeDTO?
+    @State private var deletingSeries = false
+    @State private var deleteError: String?
 
     init(ref: TitleRef, inlinePlayer: Bool = false) {
         self.ref = ref
@@ -120,6 +127,27 @@ struct TitleDetailView: View {
         .task { await model.load(session.api) }
         .refreshable { await model.load(session.api) }
         .fullScreenCover(item: $playing, onDismiss: { Task { await model.load(session.api) } }) { PlayerScreen(item: $0) }
+        .confirmationDialog("Eliminare l'episodio dal NAS?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
+            Button("Elimina episodio \(deleting?.numberLabel ?? "")", role: .destructive) {
+                guard let ep = deleting else { return }
+                Task {
+                    do { try await session.api.deleteEpisode(ep.id); model.removed(episode: ep.id) }
+                    catch { deleteError = error.localizedDescription }
+                }
+            }
+        } message: { Text("Il file e i sottotitoli vengono cancellati dal NAS e liberano spazio. Se vuoi rivederlo dovrai scaricarlo di nuovo.") }
+        .confirmationDialog("Eliminare tutta la serie dal NAS?", isPresented: $deletingSeries, titleVisibility: .visible) {
+            Button("Elimina la serie e tutti gli episodi", role: .destructive) {
+                guard let series = model.series else { return }
+                Task {
+                    do { try await session.api.deleteSeries(series.id); model.removedSeries() }
+                    catch { deleteError = error.localizedDescription }
+                }
+            }
+        } message: { Text("Tutti gli episodi di “\(model.title)” vengono cancellati dal NAS.") }
+        .alert("Eliminazione non riuscita", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(deleteError ?? "") }
         .sheet(isPresented: $showStatus) {
             AniListStatusSheet(current: model.entry?.status) { status in
                 showStatus = false
@@ -282,7 +310,8 @@ struct TitleDetailView: View {
                         Button("Ripara tutta la serie sul NAS", systemImage: "wrench.and.screwdriver") {
                             Task { try? await session.api.repairSeries(series.id) }
                         }
-                    } label: { Label("Ripara", systemImage: "wrench.and.screwdriver") }
+                        Button("Elimina la serie dal NAS…", systemImage: "trash", role: .destructive) { deletingSeries = true }
+                    } label: { Label("Altro", systemImage: "ellipsis") }
                         .buttonStyle(GhostButtonStyle())
                     Button { Task { for e in model.episodes where !offline.isDownloaded(e.id) { await offline.download(e, of: series, api: session.api) } } } label: {
                         Label("Scarica tutti sul dispositivo", systemImage: "arrow.down.to.line")
@@ -295,7 +324,7 @@ struct TitleDetailView: View {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(shown) { ep in
                     EpisodeRow(episode: ep, series: model.series, watchedOnAniList: Double(model.entry?.progress ?? 0) >= ep.number,
-                               playing: inlineItem?.id == "ep-\(ep.id)") {
+                               playing: inlineItem?.id == "ep-\(ep.id)", onDelete: { deleting = ep }) {
                         Haptics.tick(); play(ep)
                     }
                 }
@@ -310,7 +339,9 @@ struct TitleDetailView: View {
 
     @ViewBuilder private var similarSection: some View {
         Group {
-            if model.similar.isEmpty {
+            if !model.similarLoaded {
+                ProgressView().frame(maxWidth: .infinity).padding(.vertical, 32)
+            } else if model.similar.isEmpty {
                 Text("Nessun titolo simile").font(DS.body(14)).foregroundStyle(DS.textTertiary).frame(maxWidth: .infinity).padding(.vertical, 32)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -341,6 +372,7 @@ struct EpisodeRow: View {
     let series: SeriesDTO?
     let watchedOnAniList: Bool
     var playing = false
+    var onDelete: (() -> Void)? = nil
     let play: () -> Void
     @Environment(AppSession.self) private var session
     @Environment(OfflineDownloads.self) private var offline
@@ -380,6 +412,10 @@ struct EpisodeRow: View {
             }
             if let file = offline.localURL(for: episode.id) {
                 ShareLink(item: file) { Label("Apri con…", systemImage: "square.and.arrow.up") }
+            }
+            if let onDelete {
+                Divider()
+                Button("Elimina dal NAS…", systemImage: "trash", role: .destructive, action: onDelete)
             }
         }
     }

@@ -146,6 +146,8 @@ public final class APIClient: @unchecked Sendable {
         if let genre { q["genre"] = genre }
         return try await get("api/anilist/browse", query: q)
     }
+    /// "Simili": what AniList recommends to people who liked this title.
+    public func aniListRecommendations(_ id: Int) async throws -> [AniListMedia] { try await get("api/anilist/media/\(id)/recommendations") }
     public func aniListMedia(_ id: Int) async throws -> AniListMedia { try await get("api/anilist/media/\(id)") }
     public func aniListList(_ status: String) async throws -> [AniListEntry] { try await get("api/anilist/list/\(status)") }
     public func aniListEntry(_ mediaId: Int) async throws -> AniListEntry? {
@@ -179,7 +181,12 @@ public final class APIClient: @unchecked Sendable {
         let r: Res = try await send("PUT", "api/library/episodes/\(episodeId)/progress", json: Body(positionSeconds: position, durationSeconds: duration))
         return r.completed
     }
+    /// Deletes the file, subtitles and progress of an episode from the NAS (the series goes with its last episode).
     public func deleteEpisode(_ id: Int) async throws { _ = try await request("DELETE", "api/library/episodes/\(id)") }
+    /// Deletes a whole series from the NAS to free space.
+    public func deleteSeries(_ id: Int) async throws { _ = try await request("DELETE", "api/library/series/\(id)") }
+    /// Disk space on the NAS.
+    public func storageInfo() async throws -> StorageInfo { try await get("api/settings/storage") }
 
     /// Asks the NAS to run the episode file through the import pipeline again (timestamps, A/V sync,
     /// fast start, subtitles). Shows up in the NAS download list as "Riparazione".

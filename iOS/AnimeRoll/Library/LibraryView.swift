@@ -102,6 +102,13 @@ struct SearchView: View {
     @FocusState private var focused: Bool
 
     private let grid = [GridItem(.adaptive(minimum: 100, maximum: 150), spacing: 12, alignment: .top)]
+    /// Opening a result hides the keyboard first, so the title page doesn't appear with it still up.
+    private func open(_ ref: TitleRef) {
+        focused = false
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        openTitle(ref)
+    }
+
     private var recents: [String] { recentRaw.split(separator: "\n").map(String.init) }
 
     var body: some View {
@@ -126,13 +133,13 @@ struct SearchView: View {
                 } else {
                     LazyVGrid(columns: grid, alignment: .leading, spacing: 18) {
                         ForEach(nas) { s in
-                            Button { openTitle(.series(s)) } label: {
+                            Button { open(.series(s)) } label: {
                                 PosterCard(title: s.title, url: s.posterUrl.flatMap(URL.init(string:)), badge: "NAS", meta: s.year.map(String.init), width: 100)
                             }
                             .buttonStyle(.plain)
                         }
                         ForEach(results.filter { r in !nas.contains { $0.aniListId == r.id } }) { m in
-                            Button { openTitle(.aniList(m)) } label: {
+                            Button { open(.aniList(m)) } label: {
                                 PosterCard(title: m.title, url: m.coverUrl.flatMap(URL.init(string:)), badge: "AniList", meta: m.year.map(String.init), width: 100)
                             }
                             .buttonStyle(.plain)

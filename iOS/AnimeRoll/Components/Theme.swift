@@ -192,12 +192,6 @@ struct RankedPoster: View {
     }
 }
 
-extension SeriesDTO {
-    /// Server stores "Action, Drama".
-    var genreList: [String] {
-        (genres ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-    }
-}
 
 struct ProgressLine: View {
     let value: Double
@@ -220,17 +214,6 @@ struct ErrorBanner: View {
             .padding(10).frame(maxWidth: .infinity, alignment: .leading)
             .background(DS.pink.opacity(0.85), in: .rect(cornerRadius: DS.rCard))
             .padding(.horizontal)
-    }
-}
-
-extension Int64 {
-    var fileSize: String { ByteCountFormatter.string(fromByteCount: self, countStyle: .file) }
-}
-
-extension Double {
-    var durationLabel: String {
-        let m = Int(self) / 60
-        return m >= 60 ? "\(m / 60)h \(m % 60)m" : "\(m) min"
     }
 }
 

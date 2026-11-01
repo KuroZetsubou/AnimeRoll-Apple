@@ -21,6 +21,8 @@ struct AnimeRollTVApp: App {
                 }
             }
             .modifier(OfflineErrorAlert())
+            .preferredColorScheme(.dark)
+            .tint(DS.accent)
             .environment(session)
             .environment(OfflineDownloads.shared)
             .task {
@@ -80,6 +82,7 @@ struct TVLoginView: View {
             .frame(width: 760)
         }
         .padding(80)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(LinearGradient(colors: [Color(hex: 0x4A1F0C), DS.background, DS.background], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
     }
 

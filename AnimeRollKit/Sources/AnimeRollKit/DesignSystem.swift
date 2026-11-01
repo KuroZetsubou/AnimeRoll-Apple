@@ -79,3 +79,15 @@ public extension Color {
         self.init(red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255, blue: Double(hex & 0xFF) / 255)
     }
 }
+
+public extension Int64 {
+    var fileSize: String { ByteCountFormatter.string(fromByteCount: self, countStyle: .file) }
+}
+
+public extension Double {
+    /// "24 min" / "1h 5m".
+    var durationLabel: String {
+        let m = Int(self) / 60
+        return m >= 60 ? "\(m / 60)h \(m % 60)m" : "\(m) min"
+    }
+}

@@ -153,7 +153,8 @@ private struct RankedItem: Hashable { let rank: Int; let media: AniListMedia }
 
 // MARK: - Featured carousel
 
-/// Featured card; advances every 4.5 s, tilt parallax kept.
+/// Featured titles: swipe left / right (native paging), dots follow, auto-advance every 4.5 s.
+/// Auto-advance never runs while a finger is on the carousel, so a swipe can't be cut in half.
 struct HeroCarousel: View {
     let items: [AniListMedia]
     var compact = false
@@ -162,19 +163,61 @@ struct HeroCarousel: View {
     let open: (AniListMedia) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var index = 0
+    @State private var selected: Int?
+    @State private var busy = false
+    @State private var lastChange = Date.now
     @State private var motion = TiltMotion()
-    private let timer = Timer.publish(every: 4.5, on: .main, in: .common).autoconnect()
+    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    private var index: Int { items.firstIndex { $0.id == selected } ?? 0 }
 
     var body: some View {
-        let m = items[min(index, items.count - 1)]
         let tilt = reduceMotion ? CGSize.zero : motion.offset
+        ScrollView(.horizontal) {
+            LazyHStack(spacing: 0) {
+                ForEach(items) { m in
+                    slide(m, tilt: tilt).containerRelativeFrame(.horizontal).id(m.id)
+                }
+            }
+            .scrollTargetLayout()
+        }
+        .scrollTargetBehavior(.paging)
+        .scrollIndicators(.hidden)
+        .scrollPosition(id: $selected)
+        .onScrollPhaseChange { _, phase in
+            busy = phase != .idle
+            if phase == .idle { lastChange = .now }
+        }
+        .frame(height: compact ? 280 : 360)
+        .clipShape(.rect(cornerRadius: DS.rHero))
+        .overlay(alignment: .bottomTrailing) {
+            if items.count > 1 {
+                HStack(spacing: 6) {
+                    ForEach(items.indices, id: \.self) { i in
+                        Capsule().fill(i == index ? DS.accent : .white.opacity(0.4)).frame(width: i == index ? 18 : 6, height: 6)
+                    }
+                }
+                .padding(22).allowsHitTesting(false).animation(DS.base, value: index)
+            }
+        }
+        .padding(.horizontal, 16)
+        .onAppear { if selected == nil { selected = items.first?.id }; if !reduceMotion { motion.start() } }
+        .onDisappear { motion.stop() }
+        .onReceive(timer) { now in
+            guard items.count > 1, !busy, now.timeIntervalSince(lastChange) >= 4.5 else { return }
+            lastChange = now
+            withAnimation(DS.slow) { selected = items[(index + 1) % items.count].id }
+        }
+    }
+
+    private func slide(_ m: AniListMedia, tilt: CGSize) -> some View {
         Color.clear
-            .frame(height: compact ? 280 : 360)
             .overlay {
                 RemoteImage(url: (m.bannerUrl ?? m.coverUrl).flatMap(URL.init(string:)))
                     .scaleEffect(1.08).offset(x: tilt.width * 0.7, y: tilt.height * 0.7)
+                    .animation(.easeOut(duration: 0.15), value: tilt)
             }
+            .clipped()
             .overlay(DS.scrimBottom)
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -182,33 +225,16 @@ struct HeroCarousel: View {
                     Text(m.title).font(DS.display(32, 800)).lineLimit(2).minimumScaleFactor(0.7).padding(.top, 6)
                     Text(([m.year.map(String.init), m.genres.prefix(3).joined(separator: " · "), m.episodes.map { "\($0) episodi" }]
                         .compactMap { $0 }.filter { !$0.isEmpty }).joined(separator: " · "))
-                        .font(DS.body(13)).foregroundStyle(DS.textSecondary).padding(.bottom, 10)
+                        .font(DS.body(13)).foregroundStyle(DS.textSecondary).lineLimit(1).padding(.bottom, 10)
                     Button { open(m) } label: { Label("Scopri", systemImage: "info.circle") }
                         .buttonStyle(PrimaryButtonStyle(small: true))
                 }
-                .padding(16).offset(x: -tilt.width * 0.35, y: -tilt.height * 0.35)
+                .padding(16).padding(.trailing, 60)
+                .offset(x: -tilt.width * 0.35, y: -tilt.height * 0.35)
+                .animation(.easeOut(duration: 0.15), value: tilt)
             }
-            .overlay(alignment: .bottomTrailing) {
-                if items.count > 1 {
-                    HStack(spacing: 6) {
-                        ForEach(items.indices, id: \.self) { i in
-                            Capsule().fill(i == index ? DS.accent : .white.opacity(0.4)).frame(width: i == index ? 18 : 6, height: 6)
-                        }
-                    }
-                    .padding(22)
-                }
-            }
-            .id(m.id).transition(.opacity)
-            .clipShape(.rect(cornerRadius: DS.rHero))
-            .contentShape(.rect(cornerRadius: DS.rHero))
+            .contentShape(.rect)
             .onTapGesture { open(m) }
-            .padding(.horizontal, 16)
-            .onReceive(timer) { _ in
-                guard items.count > 1 else { return }
-                withAnimation(DS.slow) { index = (index + 1) % items.count }
-            }
-            .onAppear { if !reduceMotion { motion.start() } }
-            .onDisappear { motion.stop() }
     }
 }
 
@@ -224,7 +250,7 @@ struct HeroCarousel: View {
             guard let self, let g = data?.gravity else { return }
             let x = max(-8, min(8, g.x * 16))
             let y = max(-8, min(8, (g.y + 0.6) * 16))   // phone held at ~35°
-            withAnimation(.easeOut(duration: 0.15)) { self.offset = CGSize(width: x, height: y) }
+            self.offset = CGSize(width: x, height: y)
         }
     }
 

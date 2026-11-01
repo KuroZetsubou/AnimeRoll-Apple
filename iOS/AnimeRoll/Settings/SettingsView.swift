@@ -9,6 +9,7 @@ struct SettingsView: View {
     @State private var passkeys: [PasskeyInfo] = []
     @State private var message: String?
     @State private var queue: QueueSettings?
+    @State private var storage: StorageInfo?
     @State private var tg: TelegramStatus?
     @State private var tgNext: String?
     @State private var code = ""
@@ -57,6 +58,9 @@ struct SettingsView: View {
                             catch { message = error.localizedDescription }
                         }
                     }
+                    group("Spazio sul NAS", note: "Sotto la riserva il NAS rifiuta nuovi download e import. Per liberare spazio elimina episodi o serie dalla pagina del titolo.") {
+                        if let storage { storageCard(storage) } else { ProgressView().padding(16) }
+                    }
                     group("Download sul NAS", note: "Quanti lavori il NAS esegue insieme. Gli altri aspettano in coda in ordine di priorità.") {
                         HStack {
                             Text("Download contemporanei").font(DS.body(15, 500))
@@ -95,8 +99,36 @@ struct SettingsView: View {
         .task {
             await loadPasskeys()
             queue = try? await session.api.queueSettings()
+            storage = try? await session.api.storageInfo()
             await loadTelegram()
         }
+    }
+
+    // MARK: Storage
+
+    private func storageCard(_ s: StorageInfo) -> some View {
+        let used = s.totalBytes > 0 ? Double(s.usedBytes) / Double(s.totalBytes) : 0
+        let low = s.freeBytes < s.reserveBytes * 2
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("\(s.freeBytes.fileSize) liberi").font(DS.display(20, 700)).foregroundStyle(low ? DS.pink : .white)
+                Spacer()
+                Text("su \(s.totalBytes.fileSize)").font(DS.body(14)).foregroundStyle(DS.textTertiary)
+            }
+            GeometryReader { g in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.16))
+                    Capsule().fill(low ? DS.pink : DS.accent).frame(width: g.size.width * min(1, used))
+                }
+            }
+            .frame(height: 6)
+            HStack {
+                Label("Libreria \(s.libraryBytes.fileSize)", systemImage: "film.stack").font(DS.body(13)).foregroundStyle(DS.textSecondary)
+                Spacer()
+                Text("Riserva \(s.reserveBytes.fileSize)").font(DS.body(13)).foregroundStyle(DS.textTertiary)
+            }
+        }
+        .padding(16)
     }
 
     // MARK: Telegram
