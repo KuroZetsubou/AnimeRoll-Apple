@@ -73,9 +73,15 @@ struct MainView: View {
     @State private var width: CGFloat = 0
     @State private var tabBarHidden = false
 
+    /// iPhone Duo: two panes only half open (split on the crease). Fully open it is one big
+    /// canvas: the catalog takes the whole screen and titles open as a modal; closed it is a phone.
+    /// Devices without a hinge (iPad, landscape phones) keep two panes on wide screens.
     private var twoPanes: Bool {
-        if posture == .closed { return false }
-        return hSize == .regular || width >= 640
+        switch posture {
+        case .closed, .flat: return false
+        case .book, .tabletop: return true
+        case .none: return hSize == .regular || width >= 640
+        }
     }
 
     enum AppTab: Hashable { case home, explore, library, downloads, profile }

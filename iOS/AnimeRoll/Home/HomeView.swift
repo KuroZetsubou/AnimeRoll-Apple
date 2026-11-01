@@ -170,7 +170,7 @@ struct HeroCarousel: View {
         let m = items[min(index, items.count - 1)]
         let tilt = reduceMotion ? CGSize.zero : motion.offset
         Color.clear
-            .frame(height: compact ? 280 : 340)
+            .frame(height: compact ? 280 : 360)
             .overlay {
                 RemoteImage(url: (m.bannerUrl ?? m.coverUrl).flatMap(URL.init(string:)))
                     .scaleEffect(1.08).offset(x: tilt.width * 0.7, y: tilt.height * 0.7)
@@ -203,7 +203,6 @@ struct HeroCarousel: View {
             .contentShape(.rect(cornerRadius: DS.rHero))
             .onTapGesture { open(m) }
             .padding(.horizontal, 16)
-            .frame(maxWidth: compact ? 520 : 680).frame(maxWidth: .infinity)
             .onReceive(timer) { _ in
                 guard items.count > 1 else { return }
                 withAnimation(DS.slow) { index = (index + 1) % items.count }
@@ -298,40 +297,91 @@ struct CategoriesOverlay: View {
 
 // MARK: - Two panes
 
-/// Unfolded iPhone Duo / iPad / landscape: browse on the left, the selected title on the right
-/// (with the player inline at the top of the right pane, Netflix-on-foldable style).
+/// Two panes: catalog and the selected title (player inline at the top of the title pane).
+/// - iPhone Duo half open like a book: left page catalog, right page title, split exactly on the crease.
+/// - iPhone Duo in tabletop: title (with the player) on the upper half, catalog on the lower half.
+/// - iPad / wide screens without a hinge: catalog on the left, title on the right.
 /// Built by hand instead of NavigationSplitView, which collapses to one column
 /// whenever the size class is compact, even on a wide screen.
 struct DualPaneHome: View {
     @Environment(\.foldPosture) private var posture
     @State private var selected: TitleRef?
 
-    /// On an open iPhone Duo held upright the crease is in the middle:
-    /// split exactly there so nothing sits on the fold.
-    private func listWidth(_ size: CGSize) -> CGFloat {
-        let creaseIsVertical = (posture == .flat || posture == .book) && size.height >= size.width
-        return creaseIsVertical && size.width >= 640 ? size.width / 2 : max(320, size.width * 0.42)
+    /// Space kept free on each side of the crease so nothing sits on the fold.
+    private let creaseGap: CGFloat = 14
+
+    /// The crease runs through the middle of the physical screen.
+    private var screen: CGRect {
+        (UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first?.screen.bounds) ?? .zero
     }
 
     var body: some View {
         GeometryReader { geo in
-            HStack(spacing: 0) {
-                HomeView(compactHero: true)
-                    .environment(\.openTitle, OpenTitleAction { selected = $0 })
-                    .frame(width: listWidth(geo.size))
-                Divider()
-                NavigationStack {
-                    if let selected {
-                        TitleDetailView(ref: selected, inlinePlayer: true).id(selected)
-                            .environment(\.openTitle, OpenTitleAction { self.selected = $0 })
-                    } else {
-                        ContentUnavailableView("Scegli un titolo", systemImage: "rectangle.split.2x1",
-                                               description: Text("Il dettaglio e il player si aprono qui accanto."))
-                    }
+            let fold = foldFrame(geo)
+            switch posture {
+            case .tabletop:
+                VStack(spacing: 0) {
+                    titlePane.frame(height: max(200, fold.minY))
+                    crease(vertical: false).frame(height: max(1, fold.height))
+                    catalog.frame(maxHeight: .infinity)
                 }
-                .frame(maxWidth: .infinity)
+            case .book:
+                HStack(spacing: 0) {
+                    catalog.frame(width: max(280, fold.minX))
+                    crease(vertical: true).frame(width: max(1, fold.width))
+                    titlePane.frame(maxWidth: .infinity)
+                }
+            default:
+                HStack(spacing: 0) {
+                    catalog.frame(width: max(320, geo.size.width * 0.42))
+                    Divider()
+                    titlePane.frame(maxWidth: .infinity)
+                }
             }
         }
         .background(Theme.background)
+    }
+
+    /// The folding region in this view's coordinates. iOS 27.1 reports it as a reserved
+    /// "division" region while the device is partially folded; otherwise it is the middle
+    /// of the physical screen, widened by `creaseGap` on each side.
+    private func foldFrame(_ geo: GeometryProxy) -> CGRect {
+        if #available(iOS 27.1, *),
+           let region = geo.reservedRegions(kind: .division).first(where: \.isActive), !region.frame.isEmpty {
+            return region.frame
+        }
+        let global = geo.frame(in: .global)
+        if posture == .tabletop {
+            let y = screen.height / 2 - global.minY
+            return CGRect(x: 0, y: y - creaseGap, width: geo.size.width, height: creaseGap * 2)
+        }
+        let x = screen.width / 2 - global.minX
+        return CGRect(x: x - creaseGap, y: 0, width: creaseGap * 2, height: geo.size.height)
+    }
+
+    private var catalog: some View {
+        HomeView(compactHero: true).environment(\.openTitle, OpenTitleAction { selected = $0 })
+    }
+
+    @ViewBuilder private var titlePane: some View {
+        NavigationStack {
+            if let selected {
+                TitleDetailView(ref: selected, inlinePlayer: true).id(selected)
+                    .environment(\.openTitle, OpenTitleAction { self.selected = $0 })
+            } else {
+                VStack(spacing: 12) {
+                    Image(systemName: "rectangle.split.2x1").font(.system(size: 36))
+                    Text("Scegli un titolo").font(DS.display(20, 700)).foregroundStyle(.white)
+                    Text("Il dettaglio e il player si aprono su questa metà.").font(DS.body(14))
+                }
+                .foregroundStyle(DS.textTertiary).frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+    }
+
+    /// Dark band over the fold.
+    private func crease(vertical: Bool) -> some View {
+        Rectangle().fill(Color.black).ignoresSafeArea()
+            .overlay(Rectangle().fill(DS.hairline).frame(width: vertical ? 1 : nil, height: vertical ? nil : 1))
     }
 }

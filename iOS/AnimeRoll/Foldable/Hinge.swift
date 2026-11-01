@@ -53,14 +53,15 @@ final class HingeMonitor {
         angle = angleRadians.map { $0 * 180 / .pi }
     }
 
-    /// The crease runs vertically when the open device is held upright (taller than wide)
-    /// and horizontally once it's turned sideways.
+    /// The inner display of the iPhone Duo is wider than tall with the crease running vertically
+    /// down the middle: half open in that orientation it is held like a book. Turned a quarter,
+    /// the crease is horizontal and the device stands on a table (tabletop).
     func posture(in size: CGSize) -> FoldPosture {
         switch status {
         case .unavailable, .unknown: return .none
         case .closed: return .closed
         case .fullyOpen: return .flat
-        case .partiallyOpen: return size.width > size.height ? .tabletop : .book
+        case .partiallyOpen: return size.width >= size.height ? .book : .tabletop
         }
     }
 }

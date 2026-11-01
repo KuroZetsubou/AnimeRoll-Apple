@@ -34,7 +34,11 @@ final class TitleModel {
     }
 
     var title: String { media?.title ?? series?.title ?? ref.title }
-    var description: String { media?.plainDescription ?? series?.description ?? "" }
+    var description: String {
+        (media?.plainDescription ?? series?.description ?? "")
+            .replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     /// Titles sharing a genre, from the NAS library and the home's trending/seasonal lists
     /// (there is no recommendations endpoint).
