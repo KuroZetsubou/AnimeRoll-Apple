@@ -8,6 +8,9 @@ import Security
 public final class AppSession {
     public private(set) var user: UserDTO?
     public private(set) var isRestoring = true
+    /// The NAS could not be reached at launch: the app opens with the last known user so
+    /// episodes saved on the device stay playable (away from home, no network).
+    public private(set) var isOffline = false
     public var serverURLString: String {
         didSet { UserDefaults.standard.set(serverURLString, forKey: "serverURL") }
     }
@@ -25,7 +28,35 @@ public final class AppSession {
     public func restore() async {
         defer { isRestoring = false }
         guard api.token != nil else { return }
-        do { user = try await api.me() } catch APIError.notLoggedIn { logout() } catch { /* offline: stay logged out of UI but keep token */ }
+        do {
+            setUser(try await api.me())
+            isOffline = false
+        } catch APIError.notLoggedIn {
+            logout()
+        } catch APIError.http(let code, _) where code == 401 || code == 403 {
+            logout()   // the NAS answered: the saved login is no longer valid
+        } catch {
+            user = Self.cachedUser
+            isOffline = user != nil
+        }
+    }
+
+    /// Called when the app comes back to the foreground: leaves offline mode once the NAS answers.
+    public func retryIfOffline() async {
+        guard isOffline, let u = try? await api.me() else { return }
+        setUser(u)
+        isOffline = false
+    }
+
+    private static let userKey = "cachedUser"
+    private static var cachedUser: UserDTO? {
+        UserDefaults.standard.data(forKey: userKey).flatMap { try? APIClient.decoder.decode(UserDTO.self, from: $0) }
+    }
+
+    private func setUser(_ u: UserDTO?) {
+        user = u
+        if let u, let data = try? APIClient.encoder.encode(u) { UserDefaults.standard.set(data, forKey: Self.userKey) }
+        else { UserDefaults.standard.removeObject(forKey: Self.userKey) }
     }
 
     public func applyServerURL() throws {
@@ -55,19 +86,21 @@ public final class AppSession {
     }
 
     public func refreshUser() async {
-        if let u = try? await api.me() { user = u }
+        if let u = try? await api.me() { setUser(u); isOffline = false }
     }
 
     public func accept(_ auth: AuthResponse) {
         api.token = auth.accessToken
         Keychain.write("token", auth.accessToken)
-        user = auth.user
+        setUser(auth.user)
+        isOffline = false
     }
 
     public func logout() {
         api.token = nil
         Keychain.delete("token")
-        user = nil
+        setUser(nil)
+        isOffline = false
     }
 }
 

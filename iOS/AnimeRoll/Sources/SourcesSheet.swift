@@ -1,8 +1,13 @@
 import AnimeRollKit
 import SwiftUI
 
-/// Find a title on a source (StreamSite, Torrent, Telegram, plugins) and
-/// send the download command to the NAS — or stream it right away (StreamSite).
+extension Notification.Name {
+    /// Asks MainView to switch to the Download tab (after sending downloads to the NAS).
+    static let showDownloads = Notification.Name("AnimeRoll.showDownloads")
+}
+
+/// "Trova episodi", guided: 1 Fonte, 2 Cerca (or a link for download-only sources),
+/// 3 Risultati → pick the episodes → "Scarica sul NAS (n)". Streaming stays available per episode.
 struct SourcesSheet: View {
     let title: String
     let aniListId: Int?
@@ -15,197 +20,255 @@ struct SourcesSheet: View {
     @State private var provider: ProviderInfo?
     @State private var query = ""
     @State private var results: [SourceSearchResult] = []
-    @State private var searching = false
+    @State private var picked: SourceSearchResult?
+    @State private var episodes: [SourceEpisode] = []
+    @State private var selection = Set<String>()
+    @State private var loading = false
     @State private var error: String?
     @State private var manualRef = ""
     @State private var manualEpisode = ""
-    @State private var sentMessage: String?
+    @State private var sent = 0
+
+    private var manual: Bool { provider.map { !$0.canSearch } ?? false }
+    private var count: Int { manual ? (refIsValid ? 1 : 0) : (picked == nil ? 0 : selection.count) }
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    Picker("Fonte", selection: $provider) {
-                        ForEach(providers.filter(\.enabled)) { Text($0.name).tag(Optional($0)) }
-                    }
-                    if let hint = provider?.hint { Text(hint).font(.footnote).foregroundStyle(.secondary) }
-                }
+        ScrollView {
+            if sent > 0 { sentView } else { form }
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .background(DS.background)
+        .safeAreaInset(edge: .bottom) { if sent == 0 { bottomBar } }
+        .presentationBackground(DS.background)
+        .presentationCornerRadius(DS.rSheet)
+        .presentationDragIndicator(.visible)
+        .task {
+            query = title
+            providers = ((try? await session.api.providers()) ?? []).filter(\.enabled)
+            provider = providers.first
+            if providers.isEmpty { error = "Nessuna fonte attiva sul NAS." }
+        }
+        .task(id: provider?.id) { await search() }
+    }
 
-                if let provider, !provider.canSearch {
-                    // Download-only sources (plugins): paste a link or reference.
-                    Section("Link o riferimento") {
-                        TextField("https://…", text: $manualRef)
-                            .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
-                        TextField("Numero episodio (facoltativo)", text: $manualEpisode).keyboardType(.decimalPad)
-                        Button("Scarica sul NAS", systemImage: "externaldrive.badge.plus") {
-                            send(source: provider.id, items: [DownloadItem(sourceRef: manualRef.trimmingCharacters(in: .whitespaces),
-                                                                          episodeNumber: Double(manualEpisode.replacingOccurrences(of: ",", with: ".")))])
-                        }
-                        .disabled(!refIsValid(provider))
-                    }
-                } else {
-                    Section {
-                        HStack {
-                            TextField("Cerca", text: $query).onSubmit { Task { await search() } }
-                            if searching { ProgressView() }
-                        }
-                    }
-                    if let error { Section { Text(error).foregroundStyle(.red) } }
-                    Section("Risultati") {
-                        ForEach(results) { r in
-                            if provider?.canListEpisodes == true, let provider {
-                                NavigationLink {
-                                    SourceEpisodesView(provider: provider, result: r, seriesTitle: title, aniListId: aniListId, onStream: onStream)
-                                } label: { ResultRow(result: r) }
-                            } else {
-                                ResultRow(result: r).swipeActions { sendButton(r) }.contextMenu { sendButton(r) }
-                                    .overlay(alignment: .trailing) {
-                                        Button { send(source: provider!.id, items: [DownloadItem(sourceRef: r.ref, episodeNumber: nil)]) } label: {
-                                            Image(systemName: "externaldrive.badge.plus")
-                                        }.buttonStyle(.borderless)
-                                    }
-                            }
-                        }
-                    }
+    // MARK: Steps
+
+    private var form: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Trova episodi").font(DS.display(24, 800))
+                    Text(title).font(DS.body(13)).foregroundStyle(DS.textTertiary).lineLimit(1)
+                }
+                Spacer()
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark").font(.body.bold()).frame(width: 40, height: 40).background(DS.surface, in: .circle)
+                }
+                .buttonStyle(.plain).accessibilityLabel("Chiudi")
+            }
+            .padding(.top, 20)
+
+            step(1, "Fonte")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(providers) { p in Chip(title: p.name, selected: p.id == provider?.id) { provider = p } }
                 }
             }
-            .navigationTitle("Fonti")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Chiudi") { dismiss() } } }
-            .overlay(alignment: .bottom) {
-                if let sentMessage {
-                    Label(sentMessage, systemImage: "checkmark.circle.fill")
-                        .padding().background(.green.opacity(0.9), in: .capsule).padding(.bottom, 24)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+            if let hint = provider?.hint { Text(hint).font(DS.body(12)).foregroundStyle(DS.textSecondary).padding(.top, 8) }
+
+            if manual {
+                step(2, "Link o riferimento")
+                field("https://… o magnet", text: $manualRef, icon: "link").keyboardType(.URL)
+                field("Numero episodio (facoltativo)", text: $manualEpisode, icon: "number").keyboardType(.decimalPad).padding(.top, 10)
+            } else {
+                step(2, "Cerca")
+                field("Titolo da cercare", text: $query, icon: "magnifyingglass", pill: true)
+                    .submitLabel(.search).onSubmit { Task { await search() } }
+                if let picked { episodesStep(picked) } else { resultsStep }
+            }
+            if let error { Text(error).font(DS.body(13)).foregroundStyle(DS.pink).padding(.top, 12) }
+        }
+        .padding(.horizontal, 20).padding(.bottom, 24)
+    }
+
+    @ViewBuilder private var resultsStep: some View {
+        step(3, "Risultati")
+        if loading { ProgressView().frame(maxWidth: .infinity).padding(.vertical, 20) }
+        else if results.isEmpty { Text("Nessun risultato.").font(DS.body(14)).foregroundStyle(DS.textSecondary) }
+        ForEach(results) { r in
+            Button { open(r) } label: {
+                HStack(spacing: 12) {
+                    if let p = r.posterUrl {
+                        RemoteImage(url: URL(string: p)).frame(width: 40, height: 58).clipShape(.rect(cornerRadius: 6))
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(r.title).font(DS.body(15, 600)).lineLimit(2)
+                        if let s = r.subtitle { Text(s).font(DS.body(12)).foregroundStyle(DS.textTertiary).lineLimit(1) }
+                    }
+                    Spacer()
+                    Image(systemName: provider?.canListEpisodes == true ? "chevron.right" : "externaldrive.badge.plus")
+                        .foregroundStyle(DS.textTertiary)
                 }
+                .frame(minHeight: 52).contentShape(.rect)
             }
-            .task {
-                query = title
-                providers = (try? await session.api.providers()) ?? []
-                provider = providers.first(where: \.enabled)
-                await search()
-            }
-            .onChange(of: provider) { Task { await search() } }
+            .buttonStyle(.plain)
+            Divider().overlay(DS.hairline)
         }
     }
 
-    private func sendButton(_ r: SourceSearchResult) -> some View {
-        Button("Scarica sul NAS", systemImage: "externaldrive.badge.plus") {
-            send(source: provider!.id, items: [DownloadItem(sourceRef: r.ref, episodeNumber: nil)])
+    @ViewBuilder private func episodesStep(_ r: SourceSearchResult) -> some View {
+        HStack {
+            stepBadge(3)
+            Text(r.title).font(DS.body(15, 700)).lineLimit(1)
+            Spacer()
+            Button("Tutti") { selection = Set(episodes.map(\.ref)) }
+            Button("Nessuno") { selection = [] }.padding(.leading, 10)
         }
+        .font(DS.body(14, 600)).tint(DS.accent).padding(.top, 18).padding(.bottom, 4)
+        if loading { ProgressView().frame(maxWidth: .infinity).padding(.vertical, 20) }
+        ForEach(episodes) { ep in
+            let on = selection.contains(ep.ref)
+            HStack(spacing: 12) {
+                Button {
+                    Haptics.tick()
+                    if on { selection.remove(ep.ref) } else { selection.insert(ep.ref) }
+                } label: {
+                    HStack(spacing: 12) {
+                        RoundedRectangle(cornerRadius: 6).fill(on ? DS.accent : .clear)
+                            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(on ? DS.accent : DS.borderStrong, lineWidth: 1.5))
+                            .overlay { if on { Image(systemName: "checkmark").font(.caption.bold()).foregroundStyle(DS.onAccent) } }
+                            .frame(width: 22, height: 22)
+                        Text(ep.title).font(DS.body(15, 600)).lineLimit(1)
+                        Spacer()
+                    }
+                    .frame(minHeight: 50).contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                if provider?.canStream == true, onStream != nil {
+                    Button { Task { await stream(ep) } } label: { Image(systemName: "play.circle").font(.title3) }
+                        .buttonStyle(.plain).foregroundStyle(DS.textSecondary).accessibilityLabel("Guarda ora")
+                }
+            }
+            Divider().overlay(DS.hairline)
+        }
+        Button { withAnimation(DS.base) { picked = nil; episodes = [] } } label: {
+            Label("Risultati", systemImage: "chevron.left").font(DS.body(14, 600))
+        }
+        .tint(DS.textSecondary).padding(.top, 12)
     }
 
-    private func refIsValid(_ p: ProviderInfo) -> Bool {
+    private var bottomBar: some View {
+        VStack(spacing: 10) {
+            Button { Task { await send() } } label: {
+                Label("Scarica sul NAS (\(count))", systemImage: "externaldrive.badge.plus")
+            }
+            .buttonStyle(PrimaryButtonStyle()).disabled(count == 0).opacity(count == 0 ? 0.4 : 1)
+            if !manual, provider?.canStream == true, onStream != nil, let first = selectedEpisodes.first ?? episodes.first {
+                Button { Task { await stream(first) } } label: { Label("Guarda subito in streaming", systemImage: "play.fill") }
+                    .buttonStyle(PrimaryButtonStyle(prominent: false))
+            }
+        }
+        .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 8)
+        .background(DS.background.opacity(0.96))
+    }
+
+    private var sentView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "checkmark.circle.fill").font(.system(size: 48)).foregroundStyle(DS.accent).padding(.top, 48)
+            Text("Inviati \(sent) download al NAS").font(DS.display(20, 700))
+            Text("Li trovi nella coda in Download.").font(DS.body(14)).foregroundStyle(DS.textSecondary)
+            Button("Vai a Download") {
+                dismiss()
+                NotificationCenter.default.post(name: .showDownloads, object: nil)
+            }
+            .buttonStyle(PrimaryButtonStyle()).padding(.top, 8)
+            Button("Chiudi") { dismiss() }.buttonStyle(PrimaryButtonStyle(prominent: false))
+        }
+        .padding(.horizontal, 20)
+    }
+
+    // MARK: Pieces
+
+    private func step(_ n: Int, _ label: String) -> some View {
+        HStack(spacing: 10) { stepBadge(n); Text(label).font(DS.body(15, 700)) }.padding(.top, 18).padding(.bottom, 10)
+    }
+
+    private func stepBadge(_ n: Int) -> some View {
+        Text("\(n)").font(DS.display(12, 800)).foregroundStyle(DS.onAccent).frame(width: 22, height: 22).background(DS.accent, in: .circle)
+    }
+
+    private func field(_ placeholder: String, text: Binding<String>, icon: String, pill: Bool = false) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon).foregroundStyle(DS.textTertiary)
+            TextField(placeholder, text: text).font(DS.body(16)).textInputAutocapitalization(.never).autocorrectionDisabled()
+            if !text.wrappedValue.isEmpty {
+                Button { text.wrappedValue = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(DS.textTertiary) }
+            }
+        }
+        .padding(.horizontal, 16).frame(height: 52)
+        .background(DS.surface, in: .rect(cornerRadius: pill ? 26 : DS.rCard))
+        .overlay(RoundedRectangle(cornerRadius: pill ? 26 : DS.rCard).strokeBorder(DS.hairline))
+    }
+
+    private var selectedEpisodes: [SourceEpisode] { episodes.filter { selection.contains($0.ref) } }
+
+    private var refIsValid: Bool {
         let ref = manualRef.trimmingCharacters(in: .whitespaces)
         guard !ref.isEmpty else { return false }
-        guard let pattern = p.refPattern else { return true }
+        guard let pattern = provider?.refPattern else { return true }
         return ref.range(of: pattern, options: .regularExpression) != nil
     }
 
+    // MARK: Actions
+
     private func search() async {
+        picked = nil; episodes = []
         guard let provider, provider.canSearch, !query.isEmpty else { results = []; return }
-        searching = true; error = nil
+        loading = true; error = nil
         do { results = try await session.api.search(source: provider.id, query: query) }
         catch { self.error = error.localizedDescription; results = [] }
-        searching = false
+        loading = false
     }
 
-    private func send(source: String, items: [DownloadItem]) {
+    private func open(_ r: SourceSearchResult) {
+        guard let provider else { return }
+        Haptics.tick()
+        guard provider.canListEpisodes else {
+            Task { await send(items: [DownloadItem(sourceRef: r.ref, episodeNumber: nil)], aniList: r.aniListId) }
+            return
+        }
+        withAnimation(DS.base) { picked = r }
+        loading = true
         Task {
-            do {
-                try await session.api.requestNASDownload(DownloadRequest(source: source, seriesTitle: title, aniListId: aniListId, items: items))
-                withAnimation { sentMessage = "Inviato al NAS" }
-                try? await Task.sleep(for: .seconds(2))
-                withAnimation { sentMessage = nil }
-            } catch { self.error = error.localizedDescription }
-        }
-    }
-}
-
-private struct ResultRow: View {
-    let result: SourceSearchResult
-    var body: some View {
-        HStack(spacing: 12) {
-            if let p = result.posterUrl {
-                RemoteImage(url: URL(string: p)).frame(width: 44, height: 64).clipShape(.rect(cornerRadius: 4))
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(result.title).font(.subheadline).lineLimit(3)
-                if let s = result.subtitle { Text(s).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
-            }
-        }
-        .padding(.trailing, 36)
-    }
-}
-
-/// Episode picker: select some or all, send to the NAS, or stream one now.
-struct SourceEpisodesView: View {
-    let provider: ProviderInfo
-    let result: SourceSearchResult
-    let seriesTitle: String
-    let aniListId: Int?
-    var onStream: ((URL, String) -> Void)?
-
-    @Environment(AppSession.self) private var session
-    @Environment(\.dismiss) private var dismiss
-    @State private var episodes: [SourceEpisode] = []
-    @State private var selection = Set<String>()
-    @State private var loading = true
-    @State private var message: String?
-
-    private var resolvedAniListId: Int? {
-        aniListId ?? episodes.first?.extra?["anilistId"].flatMap(Int.init)
-    }
-
-    var body: some View {
-        List(selection: $selection) {
-            if let message { Text(message).foregroundStyle(.green) }
-            ForEach(episodes) { ep in
-                HStack {
-                    Text(ep.title)
-                    Spacer()
-                    if provider.canStream, onStream != nil {
-                        Button { Task { await stream(ep) } } label: { Image(systemName: "play.circle") }.buttonStyle(.borderless)
-                    }
-                }
-                .tag(ep.ref)
-            }
-        }
-        .environment(\.editMode, .constant(.active))
-        .overlay { if loading { ProgressView() } }
-        .navigationTitle(result.title)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(selection.count == episodes.count ? "Nessuno" : "Tutti") {
-                    selection = selection.count == episodes.count ? [] : Set(episodes.map(\.ref))
-                }
-            }
-            ToolbarItem(placement: .bottomBar) {
-                Button { Task { await send() } } label: {
-                    Label("Scarica sul NAS (\(selection.count))", systemImage: "externaldrive.badge.plus")
-                }
-                .buttonStyle(.borderedProminent).disabled(selection.isEmpty)
-            }
-        }
-        .task {
-            episodes = (try? await session.api.sourceEpisodes(source: provider.id, ref: result.ref)) ?? []
+            episodes = (try? await session.api.sourceEpisodes(source: provider.id, ref: r.ref)) ?? []
+            selection = Set(episodes.map(\.ref))
             loading = false
         }
     }
 
     private func send() async {
-        let items = episodes.filter { selection.contains($0.ref) }.map { DownloadItem(sourceRef: $0.ref, episodeNumber: $0.number) }
+        if manual {
+            let ep = Double(manualEpisode.replacingOccurrences(of: ",", with: "."))
+            await send(items: [DownloadItem(sourceRef: manualRef.trimmingCharacters(in: .whitespaces), episodeNumber: ep)], aniList: nil)
+        } else {
+            let items = selectedEpisodes.map { DownloadItem(sourceRef: $0.ref, episodeNumber: $0.number) }
+            await send(items: items, aniList: picked?.aniListId ?? episodes.first?.extra?["anilistId"].flatMap(Int.init))
+        }
+    }
+
+    private func send(items: [DownloadItem], aniList: Int?) async {
+        guard let provider, !items.isEmpty else { return }
         do {
-            try await session.api.requestNASDownload(DownloadRequest(source: provider.id, seriesTitle: seriesTitle,
-                                                                     aniListId: resolvedAniListId, items: items))
-            message = "\(items.count) episodi inviati al NAS"
-            selection = []
-        } catch { message = error.localizedDescription }
+            _ = try await session.api.requestNASDownload(DownloadRequest(source: provider.id, seriesTitle: title,
+                                                                         aniListId: aniListId ?? aniList, items: items))
+            Haptics.tick()
+            withAnimation(DS.base) { sent = items.count }
+        } catch { self.error = error.localizedDescription }
     }
 
     private func stream(_ ep: SourceEpisode) async {
-        guard let url = try? await session.api.sourceStreamURL(source: provider.id, ref: ep.ref) else { return }
+        guard let provider, let url = try? await session.api.sourceStreamURL(source: provider.id, ref: ep.ref) else { return }
         dismiss()
-        onStream?(url, "\(seriesTitle) · \(ep.title)")
+        onStream?(url, "\(title) · \(ep.title)")
     }
 }

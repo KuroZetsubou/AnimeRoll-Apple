@@ -25,14 +25,28 @@ public final class APIClient: @unchecked Sendable {
     public static let decoder: JSONDecoder = {
         let d = JSONDecoder()
         d.dateDecodingStrategy = .custom { decoder in
-            let s = try decoder.singleValueContainer().decode(String.self)
+            let c = try decoder.singleValueContainer()
+            // Older builds saved offline metadata with JSONEncoder's default (seconds since 2001).
+            if let seconds = try? c.decode(Double.self) { return Date(timeIntervalSinceReferenceDate: seconds) }
+            let s = try c.decode(String.self)
             if let date = APIClient.parseDate(s) { return date }
             throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Data non valida: \(s)"))
         }
         return d
     }()
 
-    public static let encoder = JSONEncoder()
+    /// Dates as ISO 8601 strings: what the server expects and what `decoder` reads back
+    /// (offline metadata and index.json round-trip through both).
+    public static let encoder: JSONEncoder = {
+        let e = JSONEncoder()
+        e.dateEncodingStrategy = .custom { date, encoder in
+            let f = ISO8601DateFormatter()
+            f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            var c = encoder.singleValueContainer()
+            try c.encode(f.string(from: date))
+        }
+        return e
+    }()
 
     /// .NET writes "2026-10-30T18:31:00.1234567Z" or without the trailing Z (SQLite values are UTC).
     static func parseDate(_ raw: String) -> Date? {
@@ -126,6 +140,12 @@ public final class APIClient: @unchecked Sendable {
     }
     public func aniListDisconnect() async throws { _ = try await request("DELETE", "api/anilist/connect") }
     public func aniListSearch(_ q: String) async throws -> [AniListMedia] { try await get("api/anilist/search", query: ["q": q]) }
+    /// Esplora: one season (WINTER, SPRING, SUMMER, FALL) of a year, optionally one genre.
+    public func aniListBrowse(season: String, year: Int, genre: String? = nil) async throws -> [AniListMedia] {
+        var q = ["season": season, "year": String(year)]
+        if let genre { q["genre"] = genre }
+        return try await get("api/anilist/browse", query: q)
+    }
     public func aniListMedia(_ id: Int) async throws -> AniListMedia { try await get("api/anilist/media/\(id)") }
     public func aniListList(_ status: String) async throws -> [AniListEntry] { try await get("api/anilist/list/\(status)") }
     public func aniListEntry(_ mediaId: Int) async throws -> AniListEntry? {
@@ -160,6 +180,11 @@ public final class APIClient: @unchecked Sendable {
         return r.completed
     }
     public func deleteEpisode(_ id: Int) async throws { _ = try await request("DELETE", "api/library/episodes/\(id)") }
+
+    /// Asks the NAS to run the episode file through the import pipeline again (timestamps, A/V sync,
+    /// fast start, subtitles). Shows up in the NAS download list as "Riparazione".
+    public func repairEpisode(_ id: Int) async throws { _ = try await request("POST", "api/library/episodes/\(id)/repair") }
+    public func repairSeries(_ id: Int) async throws { _ = try await request("POST", "api/library/series/\(id)/repair") }
     public func scanInbox() async throws -> Int {
         let r: [String: Int] = try await send("POST", "api/library/scan-inbox", json: [String: String]())
         return r["imported"] ?? 0
@@ -189,6 +214,20 @@ public final class APIClient: @unchecked Sendable {
     public func cancelNASDownload(_ id: UUID) async throws { _ = try await request("POST", "api/downloads/\(id)/cancel") }
     public func retryNASDownload(_ id: UUID) async throws { _ = try await request("POST", "api/downloads/\(id)/retry") }
     public func clearFinishedNASDownloads() async throws { _ = try await request("DELETE", "api/downloads/finished") }
+
+    // Queue control
+    public func pauseNASDownload(_ id: UUID) async throws { _ = try await request("POST", "api/downloads/\(id)/pause") }
+    public func resumeNASDownload(_ id: UUID) async throws { _ = try await request("POST", "api/downloads/\(id)/resume") }
+    /// Top of the queue; if every slot is busy the lowest-priority job steps back and resumes later.
+    public func startNASDownloadNow(_ id: UUID) async throws { _ = try await request("POST", "api/downloads/\(id)/start-now") }
+    public func setNASDownloadPriority(_ id: UUID, _ priority: DownloadPriority) async throws {
+        try await sendNoContent("PUT", "api/downloads/\(id)/priority", json: ["priority": priority.rawValue])
+    }
+    public func pauseAllNASDownloads() async throws { _ = try await request("POST", "api/downloads/pause-all") }
+    public func resumeAllNASDownloads() async throws { _ = try await request("POST", "api/downloads/resume-all") }
+    public func queueSettings() async throws -> QueueSettings { try await get("api/settings/queue") }
+    @discardableResult
+    public func setQueueSettings(_ s: QueueSettings) async throws -> QueueSettings { try await send("PUT", "api/settings/queue", json: s) }
 
     // MARK: Telegram
 

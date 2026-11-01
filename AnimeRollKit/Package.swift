@@ -9,7 +9,7 @@ let package = Package(
     platforms: [.iOS(.v18), .tvOS(.v18)],
     products: [.library(name: "AnimeRollKit", targets: ["AnimeRollKit"])],
     targets: [
-        .target(name: "AnimeRollKit", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(name: "AnimeRollKit", resources: [.copy("Resources/Fonts")], swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(name: "AnimeRollKitTests", dependencies: ["AnimeRollKit"]),
     ]
 )

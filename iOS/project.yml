@@ -40,6 +40,8 @@ targets:
       path: AnimeRoll/Info.plist
       properties:
         CFBundleDisplayName: AnimeRoll
+        UIFileSharingEnabled: true           # episodes saved offline appear in the Files app
+        LSSupportsOpeningDocumentsInPlace: true
         UIBackgroundModes: [audio, fetch]
         UIApplicationSupportsMultipleScenes: true
         NSAppTransportSecurity:

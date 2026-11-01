@@ -5,6 +5,10 @@ import SwiftUI
 struct AnimeRollTVApp: App {
     @State private var session = AppSession()
 
+    init() {
+        DispatchQueue.global(qos: .userInitiated).async { PlayerModel.configureAudioSession() }
+    }
+
     var body: some Scene {
         WindowGroup {
             Group {
@@ -16,9 +20,11 @@ struct AnimeRollTVApp: App {
                     TVLoginView()
                 }
             }
+            .modifier(OfflineErrorAlert())
             .environment(session)
             .environment(OfflineDownloads.shared)
             .task {
+                DS.registerFonts()
                 await session.restore()
                 #if DEBUG
                 let env = ProcessInfo.processInfo.environment
@@ -32,17 +38,18 @@ struct AnimeRollTVApp: App {
 }
 
 enum TVTheme {
-    static let accent = Color(red: 1.0, green: 0.45, blue: 0.2)
+    static let accent = DS.accent
 }
 
 struct TVMainView: View {
     var body: some View {
         TabView {
             Tab("Home", systemImage: "house") { NavigationStack { TVHomeView() } }
+            Tab("Esplora", systemImage: "safari") { NavigationStack { TVExploreView() } }
             Tab("Cerca", systemImage: "magnifyingglass") { NavigationStack { TVSearchView() } }
-            Tab("Libreria", systemImage: "square.grid.2x2") { NavigationStack { TVLibraryView() } }
-            Tab("Download", systemImage: "arrow.down.circle") { NavigationStack { TVDownloadsView() } }
-            Tab("Impostazioni", systemImage: "gear") { NavigationStack { TVSettingsView() } }
+            Tab("Libreria", systemImage: "books.vertical") { NavigationStack { TVLibraryView() } }
+            Tab("Download", systemImage: "arrow.down.to.line") { NavigationStack { TVDownloadsView() } }
+            Tab("Profilo", systemImage: "person") { NavigationStack { TVSettingsView() } }
         }
     }
 }
@@ -58,9 +65,8 @@ struct TVLoginView: View {
         @Bindable var session = session
         HStack(spacing: 80) {
             VStack(alignment: .leading, spacing: 16) {
-                Image(systemName: "play.tv.fill").font(.system(size: 120)).foregroundStyle(TVTheme.accent)
-                Text("AnimeRoll").font(.system(size: 76, weight: .bold))
-                Text("Il tuo catalogo anime sul NAS").font(.title3).foregroundStyle(.secondary)
+                (Text("Anime") + Text("Roll").foregroundStyle(DS.accent)).font(DS.display(96, 800))
+                Text("Il tuo catalogo anime sul NAS").font(DS.body(32)).foregroundStyle(DS.textSecondary)
             }
             VStack(spacing: 24) {
                 TextField("Indirizzo NAS (https://…)", text: $session.serverURLString).keyboardType(.URL)
@@ -74,6 +80,7 @@ struct TVLoginView: View {
             .frame(width: 760)
         }
         .padding(80)
+        .background(LinearGradient(colors: [Color(hex: 0x4A1F0C), DS.background, DS.background], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
     }
 
     private func run(_ work: @escaping () async throws -> Void) {
@@ -82,5 +89,19 @@ struct TVLoginView: View {
             do { try await work() } catch { self.error = error.localizedDescription }
             busy = false
         }
+    }
+}
+
+
+/// Shows why a download to this device failed (before, failures were silent).
+struct OfflineErrorAlert: ViewModifier {
+    @Environment(OfflineDownloads.self) private var offline
+
+    func body(content: Content) -> some View {
+        content.alert("Download non riuscito", isPresented: Binding(
+            get: { offline.lastError != nil },
+            set: { if !$0 { offline.lastError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(offline.lastError ?? "") }
     }
 }

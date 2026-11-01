@@ -45,25 +45,97 @@ public final class OfflineDownloads: NSObject {
     }
     nonisolated private static var indexURL: URL { folder.appending(path: "index.json") }
 
+    /// Where the videos go. On iOS: Documents, shown in the Files app ("Su iPhone › AnimeRoll"),
+    /// so they can be opened in other apps. Index and subtitles stay hidden in `folder`.
+    nonisolated public static var videoFolder: URL {
+        #if os(tvOS)
+        return folder
+        #else
+        return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        #endif
+    }
+
+    /// "Frieren/Frieren - Episodio 3.mp4": readable in the Files app, one folder per series.
+    nonisolated static func videoPath(episode: EpisodeDTO, series: SeriesDTO) -> String {
+        let bad = CharacterSet(charactersIn: "/\\:?%*|\"<>").union(.newlines)
+        let title = series.title.components(separatedBy: bad).joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces.union(CharacterSet(charactersIn: ".")))
+        let dir = title.isEmpty ? "Serie \(series.id)" : title
+        return "\(dir)/\(dir) - Episodio \(episode.numberLabel).mp4"
+    }
+
     override private init() {
         super.init()
         if let data = try? Data(contentsOf: Self.indexURL),
            let saved = try? APIClient.decoder.decode([OfflineEpisode].self, from: data) {
-            items = saved.filter { FileManager.default.fileExists(atPath: Self.folder.appending(path: $0.fileName).path) }
+            items = saved.compactMap(Self.migrated)
+                // Deleted (or moved) from the Files app: no longer offline.
+                .filter { FileManager.default.fileExists(atPath: Self.videoFolder.appending(path: $0.fileName).path) }
+            if items.count != saved.count || items != saved { save() }
         }
-        _ = session // reconnect to background tasks
+        // Reconnect to background tasks: downloads still running after a relaunch show their progress again.
+        session.getAllTasks { tasks in
+            let ids = tasks.filter { $0.state == .running || $0.state == .suspended }
+                .compactMap { $0.taskDescription.flatMap(PendingMeta.decode)?.episode.id }
+            Task { @MainActor in for id in ids where self.inFlight[id] == nil { self.inFlight[id] = 0 } }
+        }
+    }
+
+    /// Earlier builds kept "<id>.mp4" in the hidden folder: move it next to the others under a readable name.
+    private static func migrated(_ item: OfflineEpisode) -> OfflineEpisode {
+        let old = folder.appending(path: item.fileName)
+        guard videoFolder != folder, FileManager.default.fileExists(atPath: old.path) else { return item }
+        let path = videoPath(episode: item.episode, series: item.series)
+        guard (try? moveIntoVideoFolder(old, path: path)) != nil else { return item }
+        return OfflineEpisode(episode: item.episode, series: item.series, fileName: path)
+    }
+
+    nonisolated private static func moveIntoVideoFolder(_ file: URL, path: String) throws {
+        var dest = videoFolder.appending(path: path)
+        try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? FileManager.default.removeItem(at: dest)
+        try FileManager.default.moveItem(at: file, to: dest)
+        var values = URLResourceValues(); values.isExcludedFromBackup = true   // big and re-downloadable
+        try? dest.setResourceValues(values)
     }
 
     public func localURL(for episodeId: Int) -> URL? {
-        items.first { $0.episode.id == episodeId }.map { Self.folder.appending(path: $0.fileName) }
+        items.first { $0.episode.id == episodeId }.map { Self.videoFolder.appending(path: $0.fileName) }
     }
 
     public func isDownloaded(_ episodeId: Int) -> Bool { localURL(for: episodeId) != nil }
+
+    /// Subtitles saved with the episode, pointing at the files in this container.
+    public func localSubtitles(for episodeId: Int) -> [SubtitleInfo] {
+        guard let data = try? Data(contentsOf: Self.folder.appending(path: "\(episodeId).subs.json")),
+              let tracks = try? APIClient.decoder.decode([SubtitleInfo].self, from: data) else { return [] }
+        return tracks.compactMap { t in
+            let file = Self.folder.appending(path: "\(episodeId).s\(t.index).vtt")
+            guard FileManager.default.fileExists(atPath: file.path) else { return nil }
+            var local = t; local.url = file
+            return local
+        }
+    }
+
+    /// Small files: fetched right away with the normal session, next to the video.
+    private func saveSubtitles(_ tracks: [SubtitleInfo], episodeId: Int) async {
+        var saved: [SubtitleInfo] = []
+        for t in tracks {
+            guard let (data, res) = try? await URLSession.shared.data(from: t.url),
+                  (res as? HTTPURLResponse)?.statusCode == 200 else { continue }
+            try? data.write(to: Self.folder.appending(path: "\(episodeId).s\(t.index).vtt"), options: .atomic)
+            saved.append(t)
+        }
+        if let json = try? APIClient.encoder.encode(saved) {
+            try? json.write(to: Self.folder.appending(path: "\(episodeId).subs.json"), options: .atomic)
+        }
+    }
 
     public func download(_ episode: EpisodeDTO, of series: SeriesDTO, api: APIClient) async {
         guard !isDownloaded(episode.id), inFlight[episode.id] == nil else { return }
         do {
             let info = try await api.stream(episodeId: episode.id)
+            await saveSubtitles(info.subtitles ?? [], episodeId: episode.id)
             pending[episode.id] = (episode, series)
             inFlight[episode.id] = 0
             let task = session.downloadTask(with: info.downloadUrl)
@@ -83,7 +155,15 @@ public final class OfflineDownloads: NSObject {
 
     public func delete(_ episodeId: Int) {
         guard let item = items.first(where: { $0.episode.id == episodeId }) else { return }
-        try? FileManager.default.removeItem(at: Self.folder.appending(path: item.fileName))
+        let file = Self.videoFolder.appending(path: item.fileName)
+        try? FileManager.default.removeItem(at: file)
+        // Remove the series folder once its last episode is gone.
+        let dir = file.deletingLastPathComponent()
+        if dir != Self.videoFolder, (try? FileManager.default.contentsOfDirectory(atPath: dir.path))?.isEmpty == true {
+            try? FileManager.default.removeItem(at: dir)
+        }
+        for t in localSubtitles(for: episodeId) { try? FileManager.default.removeItem(at: t.url) }
+        try? FileManager.default.removeItem(at: Self.folder.appending(path: "\(episodeId).subs.json"))
         items.removeAll { $0.episode.id == episodeId }
         save()
     }
@@ -105,18 +185,27 @@ extension OfflineDownloads: URLSessionDownloadDelegate {
     public nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         // Must move the file before returning.
         guard let meta = downloadTask.taskDescription.flatMap(PendingMeta.decode) else { return }
-        let name = "\(meta.episode.id).mp4"
-        let dest = Self.folder.appending(path: name)
-        try? FileManager.default.removeItem(at: dest)
+        // An error page (expired link, file missing on the NAS) must not be saved as the video.
+        if let http = downloadTask.response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            MainActor.assumeIsolated {
+                inFlight[meta.episode.id] = nil
+                lastError = "Il NAS ha risposto con l'errore \(http.statusCode). Riprova più tardi."
+            }
+            return
+        }
+        let name = Self.videoPath(episode: meta.episode, series: meta.series)
         do {
-            try FileManager.default.moveItem(at: location, to: dest)
-            var values = URLResourceValues(); values.isExcludedFromBackup = true
-            var d = dest; try? d.setResourceValues(values)
-        } catch { return }
+            try Self.moveIntoVideoFolder(location, path: name)
+        } catch {
+            let message = error.localizedDescription
+            MainActor.assumeIsolated { inFlight[meta.episode.id] = nil; lastError = message }
+            return
+        }
         MainActor.assumeIsolated {
             items.removeAll { $0.episode.id == meta.episode.id }
             items.append(OfflineEpisode(episode: meta.episode, series: meta.series, fileName: name))
             inFlight[meta.episode.id] = nil
+            lastError = nil
             save()
         }
     }

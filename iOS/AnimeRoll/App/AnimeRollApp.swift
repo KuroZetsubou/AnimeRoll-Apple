@@ -9,6 +9,7 @@ struct AnimeRollApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .modifier(OfflineErrorAlert())
                 .environment(session)
                 .environment(OfflineDownloads.shared)
                 .preferredColorScheme(.dark)
@@ -28,6 +29,12 @@ struct AnimeRollApp: App {
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        // Off the main thread and once: doing it when the player opens freezes the UI for hundreds of ms.
+        DispatchQueue.global(qos: .userInitiated).async { PlayerModel.configureAudioSession() }
+        return true
+    }
+
     /// Lets offline downloads finish while the app is suspended.
     func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
                      completionHandler: @escaping () -> Void) {
@@ -54,42 +61,63 @@ struct RootView: View {
     }
 }
 
-/// Compact width (iPhone, iPhone Duo folded): tab bar.
-/// Regular width (iPhone Duo unfolded, iPad): sidebar + two-pane browsing.
+/// Five tabs: Home, Esplora, Libreria, Download, Profilo. On iOS 26+ the system tab bar is the floating
+/// glass bar; on wide screens (iPad, unfolded iPhone Duo) it becomes a sidebar and Home is two-pane.
+/// Title pages open as a sheet over everything (TitleSheetHost).
 struct MainView: View {
+    @Environment(AppSession.self) private var session
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var hSize
     @Environment(\.foldPosture) private var posture
     @State private var tab: AppTab = .home
     @State private var width: CGFloat = 0
+    @State private var tabBarHidden = false
 
-    /// Two panes when the screen is wide enough for both (iPad, landscape, an open
-    /// iPhone Duo turned sideways). Never on the folded outer screen.
     private var twoPanes: Bool {
         if posture == .closed { return false }
         return hSize == .regular || width >= 640
     }
 
-    enum AppTab: Hashable { case home, search, library, downloads, profile }
+    enum AppTab: Hashable { case home, explore, library, downloads, profile }
 
     var body: some View {
         TabView(selection: $tab) {
             Tab("Home", systemImage: "house.fill", value: .home) {
-                if twoPanes { DualPaneHome() } else { NavigationStack { HomeView() } }
+                if twoPanes { DualPaneHome() }
+                else {
+                    HomeView(onScrollDirection: { down in
+                        guard down != tabBarHidden else { return }
+                        withAnimation(DS.base) { tabBarHidden = down }
+                    })
+                    .toolbarVisibility(tabBarHidden ? .hidden : .visible, for: .tabBar)
+                }
             }
-            Tab("Cerca", systemImage: "magnifyingglass", value: .search) {
-                NavigationStack { SearchView() }
-            }
-            Tab("Libreria", systemImage: "square.grid.2x2.fill", value: .library) {
-                NavigationStack { LibraryView() }
-            }
-            Tab("Download", systemImage: "arrow.down.circle.fill", value: .downloads) {
-                NavigationStack { DownloadsView() }
-            }
-            Tab("Profilo", systemImage: "person.crop.circle", value: .profile) {
-                NavigationStack { SettingsView() }
-            }
+            Tab("Esplora", systemImage: "safari", value: .explore) { NavigationStack { ExploreView() } }
+            Tab("Libreria", systemImage: "books.vertical.fill", value: .library) { NavigationStack { LibraryView() } }
+            Tab("Download", systemImage: "arrow.down.to.line", value: .downloads) { NavigationStack { DownloadsView() } }
+            Tab("Profilo", systemImage: "person.fill", value: .profile) { NavigationStack { SettingsView() } }
         }
         .tabViewStyle(.sidebarAdaptable)
+        .onChange(of: tab) { _, _ in Haptics.tick(); tabBarHidden = false }
+        .modifier(TitleSheetHost())
         .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
+        .onAppear { DS.registerFonts(); if session.isOffline { tab = .downloads } }
+        .onReceive(NotificationCenter.default.publisher(for: .showDownloads)) { _ in tab = .downloads }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await session.retryIfOffline() } }
+        }
+    }
+}
+
+/// Shows why a download to this device failed (before, failures were silent).
+struct OfflineErrorAlert: ViewModifier {
+    @Environment(OfflineDownloads.self) private var offline
+
+    func body(content: Content) -> some View {
+        content.alert("Download non riuscito", isPresented: Binding(
+            get: { offline.lastError != nil },
+            set: { if !$0 { offline.lastError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(offline.lastError ?? "") }
     }
 }

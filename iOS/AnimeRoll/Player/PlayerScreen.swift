@@ -22,6 +22,7 @@ private struct PlayerScreenContent: View {
     @Environment(\.foldPosture) private var posture
     @State private var model: PlayerModel?
     @State private var showEpisodes = true
+    @State private var pip = PiPHolder()
 
     private var isEpisode: Bool { if case .episode = item { true } else { false } }
 
@@ -37,6 +38,7 @@ private struct PlayerScreenContent: View {
             }
         }
         .background(.black)
+        .overlay { if let model { LoadingOverlay(model: model) } else { ProgressView().controlSize(.large).tint(.white) } }
         .statusBarHidden()
         .task {
             let m = PlayerModel(api: session.api)
@@ -52,7 +54,10 @@ private struct PlayerScreenContent: View {
     private func tabletop(_ size: CGSize) -> some View {
         VStack(spacing: 0) {
             ZStack {
-                if let model { SystemPlayer(player: model.player, showsControls: false) }
+                if let model {
+                    SystemPlayer(player: model.player, showsControls: false)
+                    SubtitleOverlay(controller: model.subtitles, videoSize: model.videoSize)
+                }
             }
             .frame(height: size.height / 2)
             if let model {
@@ -69,9 +74,15 @@ private struct PlayerScreenContent: View {
             ZStack(alignment: .topLeading) {
                 if let model {
                     SystemPlayer(player: model.player)
+                    SubtitleOverlay(controller: model.subtitles, videoSize: model.videoSize)
                     NextUpOverlay(model: model)
                 }
-                closeButton.padding()
+                HStack {
+                    closeButton
+                    Spacer()
+                    if let model { SubtitleMenu(controller: model.subtitles) }
+                }
+                .padding()
             }
             .frame(width: size.width / 2)
             if let model {
@@ -81,24 +92,24 @@ private struct PlayerScreenContent: View {
         }
     }
 
+    /// Phone and iPad: custom AnimeRoll controls over the video; on wide screens the episode list can sit beside it.
     private func standard(_ size: CGSize) -> some View {
         let wide = (hSize == .regular || posture == .flat) && size.width > 900
         return HStack(spacing: 0) {
-            ZStack(alignment: .topLeading) {
+            ZStack {
                 if let model {
-                    SystemPlayer(player: model.player).ignoresSafeArea()
-                    NextUpOverlay(model: model)
+                    PlayerSurface(player: model.player, pip: pip).ignoresSafeArea()
+                    SubtitleOverlay(controller: model.subtitles, videoSize: model.videoSize).ignoresSafeArea().allowsHitTesting(false)
+                    PlayerControls(model: model, pip: pip, isEpisode: isEpisode && !(wide && showEpisodes), close: close)
                 }
-                HStack {
-                    closeButton
-                    Spacer()
-                    if wide, isEpisode {
-                        Button { withAnimation { showEpisodes.toggle() } } label: {
-                            Image(systemName: "sidebar.right").font(.headline).padding(10).background(.ultraThinMaterial, in: .circle)
-                        }
+            }
+            .overlay(alignment: .topTrailing) {
+                if wide, isEpisode {
+                    Button { withAnimation(DS.base) { showEpisodes.toggle() } } label: {
+                        Image(systemName: "sidebar.right").font(.headline).frame(width: 44, height: 44).glassCircle()
                     }
+                    .buttonStyle(.plain).padding(.top, 70).padding(.trailing, 20).accessibilityLabel("Episodi")
                 }
-                .padding()
             }
             if wide, showEpisodes, let model, isEpisode {
                 EpisodePanel(model: model).frame(width: min(380, size.width * 0.32))
@@ -125,10 +136,11 @@ private struct TabletopControls: View {
         VStack(spacing: 14) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(model.title).font(.headline).lineLimit(1)
-                    Text(model.subtitle).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                    Text(model.title).font(DS.display(20, 800)).lineLimit(1)
+                    Text(model.subtitle).font(DS.body(13)).foregroundStyle(DS.textSecondary).lineLimit(1)
                 }
                 Spacer()
+                SubtitleMenu(controller: model.subtitles)
                 Button(action: close) { Image(systemName: "xmark").font(.headline).padding(10).background(Theme.card, in: .circle) }
             }
 
@@ -136,12 +148,9 @@ private struct TabletopControls: View {
                 let duration = model.player.currentItem?.duration.seconds ?? 0
                 let current = scrubbing ?? model.player.currentTime().seconds
                 VStack(spacing: 2) {
-                    Slider(value: Binding(get: { current.isFinite ? current : 0 }, set: { scrubbing = $0 }),
-                           in: 0...max(duration.isFinite ? duration : 1, 1)) { editing in
-                        if !editing, let t = scrubbing {
-                            model.player.seek(to: CMTime(seconds: t, preferredTimescale: 600))
-                            scrubbing = nil
-                        }
+                    Scrubber(value: current.isFinite ? current : 0, duration: duration.isFinite ? duration : 0) { scrubbing = $0 } onEnd: { t in
+                        model.player.seek(to: CMTime(seconds: t, preferredTimescale: 600))
+                        scrubbing = nil
                     }
                     HStack {
                         Text(timeLabel(current)); Spacer(); Text("-" + timeLabel(max(0, duration - current)))
@@ -152,9 +161,11 @@ private struct TabletopControls: View {
 
             HStack(spacing: 36) {
                 Button { model.skip(seconds: -10) } label: { Image(systemName: "gobackward.10") }
-                Button { model.player.rate == 0 ? model.player.play() : model.player.pause() } label: {
+                Button { model.togglePlayPause() } label: {
                     TimelineView(.periodic(from: .now, by: 0.3)) { _ in
-                        Image(systemName: model.player.rate == 0 ? "play.circle.fill" : "pause.circle.fill").font(.system(size: 56))
+                        Image(systemName: model.player.rate == 0 ? "play.fill" : "pause.fill").font(.system(size: 28, weight: .bold))
+                            .foregroundStyle(DS.onAccent).frame(width: 64, height: 64)
+                            .background(DS.accent, in: .circle).shadow(color: DS.accent.opacity(0.4), radius: 20)
                     }
                 }
                 Button { model.skip(seconds: 85) } label: { Image(systemName: "forward.end.alt") } // salta sigla
@@ -165,9 +176,9 @@ private struct TabletopControls: View {
 
             if showEpisodes, let next = model.nextEpisode {
                 Button { Task { await model.playNext() } } label: {
-                    Label("Episodio \(next.numberLabel)", systemImage: "forward.end.fill").frame(maxWidth: .infinity)
+                    Label("Episodio \(next.numberLabel)", systemImage: "forward.end.fill")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PrimaryButtonStyle())
             }
             Spacer(minLength: 0)
         }
@@ -194,10 +205,15 @@ struct InlinePlayer: View {
             Color.black
             if let model {
                 SystemPlayer(player: model.player)
+                SubtitleOverlay(controller: model.subtitles, videoSize: model.videoSize)
                 NextUpOverlay(model: model)
+                LoadingOverlay(model: model)
             }
-            Button { Task { await model?.stop(); close() } } label: {
-                Image(systemName: "xmark").padding(8).background(.ultraThinMaterial, in: .circle)
+            HStack(spacing: 8) {
+                if let model { SubtitleMenu(controller: model.subtitles, compact: true) }
+                Button { Task { await model?.stop(); close() } } label: {
+                    Image(systemName: "xmark").padding(8).background(.ultraThinMaterial, in: .circle)
+                }
             }
             .padding(8)
         }
@@ -210,6 +226,19 @@ struct InlinePlayer: View {
     }
 }
 
+/// Spinner while the first frames load, or the error if the video can't play.
+private struct LoadingOverlay: View {
+    let model: PlayerModel
+    var body: some View {
+        if let error = model.error {
+            Label(error, systemImage: "exclamationmark.triangle.fill")
+                .padding().background(.ultraThinMaterial, in: .rect(cornerRadius: 12)).padding()
+        } else if model.isLoading {
+            ProgressView().controlSize(.large).tint(.white).allowsHitTesting(false)
+        }
+    }
+}
+
 private struct NextUpOverlay: View {
     let model: PlayerModel
     var body: some View {
@@ -218,7 +247,7 @@ private struct NextUpOverlay: View {
                 Button { Task { await model.playNext() } } label: {
                     Label("Episodio \(next.numberLabel)", systemImage: "forward.end.fill").padding(.horizontal, 6)
                 }
-                .buttonStyle(.borderedProminent).tint(.white).foregroundStyle(.black)
+                .buttonStyle(PrimaryButtonStyle(small: true))
                 .padding(.trailing, 24).padding(.bottom, 90)
             } }
         }
@@ -242,7 +271,7 @@ private struct EpisodePanel: View {
                             Text("E\(ep.numberLabel)").font(.subheadline.monospacedDigit().bold()).frame(width: 44, alignment: .leading)
                             Text(ep.title ?? "Episodio").lineLimit(1)
                             Spacer()
-                            if ep.id == model.currentEpisode?.id { Image(systemName: "speaker.wave.2.fill").foregroundStyle(Theme.accent) }
+                            if ep.id == model.currentEpisode?.id { Image(systemName: "speaker.wave.2.fill").foregroundStyle(DS.accent) }
                             else if ep.completed { Image(systemName: "checkmark").foregroundStyle(.secondary) }
                         }
                     }
@@ -263,7 +292,6 @@ struct SystemPlayer: UIViewControllerRepresentable {
     var showsControls = true
 
     func makeUIViewController(context: Context) -> AVPlayerViewController {
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         let vc = AVPlayerViewController()
         vc.player = player
         vc.allowsPictureInPicturePlayback = true

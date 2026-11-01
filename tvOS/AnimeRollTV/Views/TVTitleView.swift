@@ -56,6 +56,7 @@ struct TVTitleView: View {
                                     if let series, !offline.isDownloaded(ep.id) {
                                         Button("Scarica su Apple TV") { Task { await offline.download(ep, of: series, api: session.api) } }
                                     }
+                                    Button("Ripara sul NAS") { Task { try? await session.api.repairEpisode(ep.id) } }
                                     if offline.isDownloaded(ep.id) {
                                         Button("Rimuovi da Apple TV", role: .destructive) { offline.delete(ep.id) }
                                     }

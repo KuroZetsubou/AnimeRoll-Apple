@@ -103,6 +103,8 @@ public struct StreamInfo: Codable, Sendable {
     public let downloadUrl: URL
     public let durationSeconds: Double?
     public let resumeAt: Double?
+    /// WebVTT tracks next to the episode (nil from servers older than sidecar subtitles).
+    public let subtitles: [SubtitleInfo]?
 }
 
 public struct ProviderInfo: Codable, Hashable, Identifiable, Sendable {
@@ -138,19 +140,48 @@ public struct SourceEpisode: Codable, Hashable, Identifiable, Sendable {
 
 public enum DownloadStatus: String, Codable, Sendable {
     case queued = "Queued", running = "Running", postProcessing = "PostProcessing"
-    case completed = "Completed", failed = "Failed", cancelled = "Cancelled"
+    case completed = "Completed", failed = "Failed", cancelled = "Cancelled", paused = "Paused"
+    case unknown
+
+    /// A status added by a newer server must not break the whole list.
+    public init(from decoder: Decoder) throws {
+        self = DownloadStatus(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
+    }
 
     public var label: String {
         switch self {
         case .queued: "In coda"
-        case .running: "Download"
-        case .postProcessing: "Conversione"
+        case .running: "In corso"
+        case .postProcessing: "Post-elaborazione"
         case .completed: "Completato"
-        case .failed: "Errore"
+        case .failed: "Fallito"
         case .cancelled: "Annullato"
+        case .paused: "In pausa"
+        case .unknown: "—"
         }
     }
+    /// Occupies or waits for a slot.
     public var isActive: Bool { [.queued, .running, .postProcessing].contains(self) }
+    public var isRunning: Bool { self == .running || self == .postProcessing }
+    public var canPause: Bool { isActive }
+    public var canResume: Bool { self == .paused }
+    public var canCancel: Bool { isActive || self == .paused }
+    public var canRetry: Bool { self == .failed || self == .cancelled }
+}
+
+/// Queue order: higher runs first.
+public enum DownloadPriority: Int, CaseIterable, Identifiable, Sendable {
+    case low = -1, normal = 0, high = 1
+    public var id: Int { rawValue }
+    public var label: String {
+        switch self { case .low: "Bassa"; case .normal: "Normale"; case .high: "Alta" }
+    }
+}
+
+public struct QueueSettings: Codable, Sendable, Equatable {
+    public var maxConcurrentDownloads: Int
+    public static let range = 1...10
+    public init(maxConcurrentDownloads: Int) { self.maxConcurrentDownloads = maxConcurrentDownloads }
 }
 
 public struct DownloadJob: Codable, Hashable, Identifiable, Sendable {
@@ -161,10 +192,24 @@ public struct DownloadJob: Codable, Hashable, Identifiable, Sendable {
     public let aniListId: Int?
     public let episodeNumber: Double?
     public let status: DownloadStatus
+    public let priority: Int?
     public let progress: Double
     public let message: String?
     public let episodeId: Int?
     public let createdAt: Date
+
+    /// "Subito", "Alta", "Bassa" or nil for normal priority.
+    public var priorityLabel: String? {
+        switch priority ?? 0 {
+        case 10...: "Subito"
+        case 1..<10: "Alta"
+        case ..<0: "Bassa"
+        default: nil
+        }
+    }
+
+    /// Source shown in lists ("repair" jobs are library repairs, not downloads).
+    public var sourceLabel: String { source == "repair" ? "Riparazione" : source.capitalized }
 }
 
 public struct DownloadItem: Codable, Sendable {

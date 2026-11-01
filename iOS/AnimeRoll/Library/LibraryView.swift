@@ -1,81 +1,169 @@
 import AnimeRollKit
 import SwiftUI
 
-/// Everything already on the NAS.
+/// Libreria: series on the NAS, a filter field and Importa (scans /media/_inbox).
 struct LibraryView: View {
     @Environment(AppSession.self) private var session
+    @Environment(\.openTitle) private var openTitle
     @State private var series: [SeriesDTO] = []
     @State private var filter = ""
     @State private var info: String?
+    @State private var loaded = false
 
-    private let columns = [GridItem(.adaptive(minimum: 110, maximum: 170), spacing: 12)]
+    private let columns = [GridItem(.adaptive(minimum: 104, maximum: 150), spacing: 12, alignment: .top)]
+    private var shown: [SeriesDTO] {
+        series.filter { filter.isEmpty || $0.title.localizedCaseInsensitiveContains(filter) || ($0.titleRomaji?.localizedCaseInsensitiveContains(filter) ?? false) }
+            .sorted { $0.title.localizedCompare($1.title) == .orderedAscending }
+    }
 
     var body: some View {
         ScrollView {
-            if let info { Text(info).font(.footnote).foregroundStyle(.secondary).padding(.top) }
-            LazyVGrid(columns: columns, spacing: 18) {
-                ForEach(series.filter { filter.isEmpty || $0.title.localizedCaseInsensitiveContains(filter) }) { s in
-                    NavigationLink(value: TitleRef.series(s)) {
-                        PosterCard(title: s.title, url: s.posterUrl.flatMap(URL.init(string:)), badge: "\(s.episodeCount)", width: 110)
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    ScreenTitle("Libreria")
+                    Spacer()
+                    Button { Task { await importInbox() } } label: { Label("Importa", systemImage: "tray.and.arrow.down") }
+                        .buttonStyle(PrimaryButtonStyle(prominent: false, small: true))
+                }
+                SearchPill(text: $filter, placeholder: "Filtra la libreria")
+                if let info { Text(info).font(DS.body(13)).foregroundStyle(DS.accent) }
+                if loaded && shown.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "folder").font(.system(size: 36))
+                        Text(filter.isEmpty ? "Scarica qualcosa sul NAS o metti i file in /media/_inbox e premi Importa"
+                                            : "Nessuna serie per “\(filter)”")
+                            .font(DS.body(15)).multilineTextAlignment(.center)
                     }
-                    .buttonStyle(.plain)
+                    .foregroundStyle(DS.textTertiary).frame(maxWidth: .infinity).padding(.vertical, 48)
+                }
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 18) {
+                    ForEach(shown) { s in
+                        Button { openTitle(.series(s)) } label: {
+                            PosterCard(title: s.title, url: s.posterUrl.flatMap(URL.init(string:)),
+                                       meta: [s.year.map(String.init), "\(s.episodeCount)\(s.totalEpisodes.map { "/\($0)" } ?? "") ep"].compactMap { $0 }.joined(separator: " · "),
+                                       width: 104)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
-            .padding()
+            .padding(.horizontal).padding(.top, 8).padding(.bottom, 120)
         }
-        .overlay {
-            if series.isEmpty {
-                ContentUnavailableView("Libreria vuota", systemImage: "externaldrive",
-                                       description: Text("Scarica qualcosa sul NAS o metti i file in /media/_inbox e premi Importa."))
-            }
-        }
+        .scrollDismissesKeyboard(.interactively)
         .background(Theme.background)
-        .navigationTitle("Libreria")
-        .searchable(text: $filter, prompt: "Filtra")
-        .navigationDestination(for: TitleRef.self) { TitleDetailView(ref: $0) }
-        .toolbar {
-            Button("Importa", systemImage: "tray.and.arrow.down") {
-                Task {
-                    let n = (try? await session.api.scanInbox()) ?? 0
-                    info = "Importati \(n) episodi da _inbox"
-                    await load()
-                }
-            }
-        }
+        .toolbar(.hidden, for: .navigationBar)
         .refreshable { await load() }
         .task { await load() }
     }
 
-    private func load() async { series = (try? await session.api.library()) ?? series }
+    private func importInbox() async {
+        Haptics.tick()
+        do { let n = try await session.api.scanInbox(); info = "Importati \(n) episodi da _inbox"; await load() }
+        catch { info = error.localizedDescription }
+    }
+
+    private func load() async { series = (try? await session.api.library()) ?? series; loaded = true }
 }
 
-/// AniList search → title page (which shows NAS episodes or lets you find sources).
-struct SearchView: View {
-    @Environment(AppSession.self) private var session
-    @State private var query = ""
-    @State private var results: [AniListMedia] = []
+/// Rounded search / filter field.
+struct SearchPill: View {
+    @Binding var text: String
+    var placeholder: String
+    var focused: FocusState<Bool>.Binding? = nil
 
     var body: some View {
-        List(results) { m in
-            NavigationLink(value: TitleRef.aniList(m)) {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass").foregroundStyle(DS.textTertiary)
+            field.font(DS.body(16)).autocorrectionDisabled().textInputAutocapitalization(.never).submitLabel(.search)
+            if !text.isEmpty {
+                Button { text = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(DS.textTertiary) }
+                    .accessibilityLabel("Cancella")
+            }
+        }
+        .padding(.horizontal, 16).frame(height: 48)
+        .background(DS.surface, in: .capsule).overlay(Capsule().strokeBorder(DS.hairline))
+    }
+
+    @ViewBuilder private var field: some View {
+        if let focused { TextField(placeholder, text: $text).focused(focused) } else { TextField(placeholder, text: $text) }
+    }
+}
+
+/// Cerca: recent searches while empty, then a poster grid mixing the NAS (first) and AniList, as you type.
+struct SearchView: View {
+    @Environment(AppSession.self) private var session
+    @Environment(\.openTitle) private var openTitle
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("recentSearches") private var recentRaw = ""
+    @State private var query = ""
+    @State private var nas: [SeriesDTO] = []
+    @State private var results: [AniListMedia] = []
+    @State private var searched = false
+    @FocusState private var focused: Bool
+
+    private let grid = [GridItem(.adaptive(minimum: 100, maximum: 150), spacing: 12, alignment: .top)]
+    private var recents: [String] { recentRaw.split(separator: "\n").map(String.init) }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 12) {
-                    RemoteImage(url: m.coverUrl.flatMap(URL.init(string:))).frame(width: 50, height: 74).clipShape(.rect(cornerRadius: 4))
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(m.title).font(.subheadline.bold())
-                        Text([m.year.map(String.init), m.format, m.episodes.map { "\($0) ep" }].compactMap { $0 }.joined(separator: " · "))
-                            .font(.caption).foregroundStyle(.secondary)
+                    SearchPill(text: $query, placeholder: "Cerca titoli", focused: $focused)
+                    Button("Annulla") { dismiss() }.font(DS.body(15, 600)).tint(DS.accent)
+                }
+                if query.count < 2 {
+                    if !recents.isEmpty {
+                        Text("Recenti").font(DS.display(17, 700)).padding(.top, 10)
+                        ForEach(recents, id: \.self) { r in
+                            Button { query = r } label: {
+                                HStack(spacing: 12) { Image(systemName: "clock"); Text(r); Spacer() }
+                                    .font(DS.body(15)).foregroundStyle(DS.textSecondary).frame(height: 44).contentShape(.rect)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    Text("I risultati mescolano la libreria NAS e AniList.").font(DS.body(13)).foregroundStyle(DS.textTertiary).padding(.top, 8)
+                } else {
+                    LazyVGrid(columns: grid, alignment: .leading, spacing: 18) {
+                        ForEach(nas) { s in
+                            Button { openTitle(.series(s)) } label: {
+                                PosterCard(title: s.title, url: s.posterUrl.flatMap(URL.init(string:)), badge: "NAS", meta: s.year.map(String.init), width: 100)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        ForEach(results.filter { r in !nas.contains { $0.aniListId == r.id } }) { m in
+                            Button { openTitle(.aniList(m)) } label: {
+                                PosterCard(title: m.title, url: m.coverUrl.flatMap(URL.init(string:)), badge: "AniList", meta: m.year.map(String.init), width: 100)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.top, 6)
+                    if searched && nas.isEmpty && results.isEmpty {
+                        Text("Nessun risultato per “\(query)”").font(DS.body(15)).foregroundStyle(DS.textTertiary)
+                            .frame(maxWidth: .infinity).padding(.top, 32)
                     }
                 }
             }
+            .padding(.horizontal).padding(.top, 8).padding(.bottom, 120)
         }
-        .listStyle(.plain)
-        .navigationTitle("Cerca")
-        .searchable(text: $query, prompt: "Titolo anime")
+        .scrollDismissesKeyboard(.interactively)
+        .background(Theme.background)
+        .toolbar(.hidden, for: .navigationBar)
+        .onAppear { focused = true }
         .task(id: query) {
-            guard query.count >= 2 else { results = []; return }
-            try? await Task.sleep(for: .milliseconds(350)) // debounce
-            results = (try? await session.api.aniListSearch(query)) ?? results
+            searched = false
+            guard query.count >= 2 else { results = []; nas = []; return }
+            try? await Task.sleep(for: .milliseconds(300)) // debounce
+            guard !Task.isCancelled else { return }
+            async let n = try? session.api.library(query: query)
+            async let r = try? session.api.aniListSearch(query)
+            let (nn, rr) = await (n, r)
+            nas = nn ?? []
+            results = rr ?? results
+            searched = true
+            let q = query.trimmingCharacters(in: .whitespaces)
+            recentRaw = ([q] + recents.filter { $0 != q }).prefix(6).joined(separator: "\n")
         }
-        .navigationDestination(for: TitleRef.self) { TitleDetailView(ref: $0) }
     }
 }
