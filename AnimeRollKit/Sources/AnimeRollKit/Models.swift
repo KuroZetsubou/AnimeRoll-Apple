@@ -114,6 +114,8 @@ public struct ProviderInfo: Codable, Hashable, Identifiable, Sendable {
     public let canSearch: Bool
     public let canListEpisodes: Bool
     public let canStream: Bool
+    /// Can fetch only the subtitle files of an episode ("Aggiorna sottotitoli").
+    public let canSubtitles: Bool?
     public let hint: String?
     /// Regex a pasted reference must match (download-only plugins).
     public let refPattern: String?
@@ -254,6 +256,12 @@ public struct PasskeyInfo: Codable, Hashable, Identifiable, Sendable {
 }
 
 /// Anything the UI can open as a "title" page: either already on the NAS or only on AniList.
+/// A title AniList links to this one (stagione precedente/successiva, storia parallela…); `relation` is already in Italian.
+public struct RelatedDTO: Codable, Hashable, Sendable {
+    public let relation: String
+    public let media: AniListMedia
+}
+
 public enum TitleRef: Hashable, Sendable {
     case series(SeriesDTO)
     case aniList(AniListMedia)

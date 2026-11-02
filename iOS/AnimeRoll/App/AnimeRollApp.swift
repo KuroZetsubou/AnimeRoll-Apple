@@ -48,7 +48,7 @@ struct RootView: View {
     var body: some View {
         Group {
             if session.isRestoring {
-                ProgressView().controlSize(.large)
+                LaunchLoadingView()
             } else if session.isLoggedIn {
                 MainView()
             } else {

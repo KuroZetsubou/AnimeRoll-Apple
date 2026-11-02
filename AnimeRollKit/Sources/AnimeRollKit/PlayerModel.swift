@@ -32,7 +32,8 @@ public final class PlayerModel {
         public let name: String
         public let language: String?
     }
-    private static let audioLanguageKey = "preferredAudioLanguage"
+    /// Two-letter language ("ja", "it", "en"), empty for "first track". Also set from Profilo.
+    public static let audioLanguageKey = "preferredAudioLanguage"
 
     public let player: AVPlayer
     public private(set) var title = ""
@@ -48,6 +49,8 @@ public final class PlayerModel {
     /// the tracks are then switched on and off one by one.
     @ObservationIgnored private var audioTrackIDs: [CMPersistentTrackID] = []
     /// Seconds left before the next episode starts by itself, nil when no countdown is running.
+    /// Whether the player's on-screen controls are showing; side buttons outside them follow it.
+    public var controlsVisible = true
     public private(set) var autoNextIn: Int?
     /// Profile setting: seconds to wait after an episode ends before playing the next one (0 = off).
     public static let autoNextKey = "autoNextDelay"
@@ -117,7 +120,17 @@ public final class PlayerModel {
         let url: URL
         if let local = OfflineDownloads.shared.localURL(for: ep.id) {
             url = local
-            subtitles.setTracks(OfflineDownloads.shared.localSubtitles(for: ep.id), seriesId: series?.id)
+            let local = OfflineDownloads.shared.localSubtitles(for: ep.id)
+            subtitles.setTracks(local, seriesId: series?.id)
+            if local.isEmpty {
+                // Downloaded before subtitles were kept: fetch them in the background if the NAS answers.
+                let seriesId = series?.id
+                Task { [weak self] in
+                    guard let self else { return }
+                    let fetched = await OfflineDownloads.shared.backfillSubtitles(for: ep.id, api: self.api)
+                    if !fetched.isEmpty, self.currentEpisode?.id == ep.id { self.subtitles.setTracks(fetched, seriesId: seriesId) }
+                }
+            }
         } else {
             do {
                 let info = try await api.stream(episodeId: ep.id)

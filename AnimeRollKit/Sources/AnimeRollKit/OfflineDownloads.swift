@@ -142,6 +142,14 @@ public final class OfflineDownloads: NSObject {
         }
     }
 
+    /// Episodes saved before subtitles were kept (or whose subtitle download failed): fetch them now, while the NAS is reachable.
+    public func backfillSubtitles(for episodeId: Int, api: APIClient) async -> [SubtitleInfo] {
+        guard isDownloaded(episodeId), localSubtitles(for: episodeId).isEmpty,
+              let info = try? await api.stream(episodeId: episodeId), let tracks = info.subtitles, !tracks.isEmpty else { return [] }
+        await saveSubtitles(tracks, episodeId: episodeId)
+        return localSubtitles(for: episodeId)
+    }
+
     public func download(_ episode: EpisodeDTO, of series: SeriesDTO, api: APIClient) async {
         guard !isDownloaded(episode.id), inFlight[episode.id] == nil else { return }
         do {

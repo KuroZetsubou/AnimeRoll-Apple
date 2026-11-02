@@ -11,6 +11,8 @@ extension Notification.Name {
 struct SourcesSheet: View {
     let title: String
     let aniListId: Int?
+    /// Series already in the library: enables "Aggiorna solo i sottotitoli".
+    var seriesId: Int? = nil
     /// Direct streaming without downloading.
     var onStream: ((URL, String) -> Void)? = nil
 
@@ -28,6 +30,7 @@ struct SourcesSheet: View {
     @State private var manualRef = ""
     @State private var manualEpisode = ""
     @State private var sent = 0
+    @State private var subtitleNote: String?
 
     private var manual: Bool { provider.map { !$0.canSearch } ?? false }
     private var count: Int { manual ? (refIsValid ? 1 : 0) : (picked == nil ? 0 : selection.count) }
@@ -163,6 +166,11 @@ struct SourcesSheet: View {
                 Label("Scarica sul NAS (\(count))", systemImage: "externaldrive.badge.plus")
             }
             .buttonStyle(PrimaryButtonStyle()).disabled(count == 0).opacity(count == 0 ? 0.4 : 1)
+            if !manual, provider?.canSubtitles == true, picked != nil, seriesId != nil {
+                Button { Task { await refreshSubtitles() } } label: { Label("Aggiorna solo i sottotitoli (ASS)", systemImage: "captions.bubble") }
+                    .buttonStyle(PrimaryButtonStyle(prominent: false))
+                if let subtitleNote { Text(subtitleNote).font(DS.body(12)).foregroundStyle(DS.textSecondary).multilineTextAlignment(.center) }
+            }
             if !manual, provider?.canStream == true, onStream != nil, let first = selectedEpisodes.first ?? episodes.first {
                 Button { Task { await stream(first) } } label: { Label("Guarda subito in streaming", systemImage: "play.fill") }
                     .buttonStyle(PrimaryButtonStyle(prominent: false))
@@ -244,6 +252,16 @@ struct SourcesSheet: View {
             selection = Set(episodes.map(\.ref))
             loading = false
         }
+    }
+
+    private func refreshSubtitles() async {
+        guard let provider, let picked, let seriesId else { return }
+        subtitleNote = "Invio…"
+        do {
+            let r = try await session.api.refreshSubtitles(seriesId: seriesId, source: provider.id, seriesRef: picked.ref)
+            let missing = r.notFound.isEmpty ? "" : " · non trovati su \(provider.name): " + r.notFound.map { String(format: "%g", $0) }.joined(separator: ", ")
+            subtitleNote = "\(r.queued) episodi in coda per i sottotitoli\(missing). Segui l'avanzamento in Download."
+        } catch { subtitleNote = error.localizedDescription }
     }
 
     private func send() async {

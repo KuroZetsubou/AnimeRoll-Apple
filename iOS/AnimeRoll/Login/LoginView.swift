@@ -7,6 +7,7 @@ struct LoginView: View {
     @State private var password = ""
     @State private var isRegistering = false
     @State private var busy = false
+    @Environment(OfflineDownloads.self) private var offline
     @State private var error: String?
 
     var body: some View {
@@ -53,6 +54,10 @@ struct LoginView: View {
                     }
                     .buttonStyle(PrimaryButtonStyle(prominent: false)).disabled(busy)
 
+                    if !offline.items.isEmpty {
+                        Button { session.continueOffline() } label: { Label("Guarda i download offline", systemImage: "arrow.down.circle") }
+                            .buttonStyle(PrimaryButtonStyle(prominent: false))
+                    }
                     Button(isRegistering ? "Ho già un account" : "Primo avvio? Crea l'account") { isRegistering.toggle() }
                         .font(DS.body(14, 600)).foregroundStyle(DS.accent)
                 }

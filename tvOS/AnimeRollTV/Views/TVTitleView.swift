@@ -11,6 +11,7 @@ struct TVTitleView: View {
     @State private var episodes: [EpisodeDTO] = []
     @State private var entry: AniListEntry?
     @State private var similar: [TitleRef]?
+    @State private var related: [(relation: String, ref: TitleRef)] = []
     @State private var playing: PlaybackItem?
     @State private var showSources = false
     @State private var section = 0
@@ -75,7 +76,7 @@ struct TVTitleView: View {
                 .overlay(DS.background.opacity(0.82)).blur(radius: 30).ignoresSafeArea()
         }
         .fullScreenCover(item: $playing, onDismiss: { Task { await load() } }) { TVPlayerView(item: $0) }
-        .sheet(isPresented: $showSources, onDismiss: { Task { await load() } }) { TVSourcesView(title: media?.title ?? ref.title, aniListId: ref.aniListId) }
+        .sheet(isPresented: $showSources, onDismiss: { Task { await load() } }) { TVSourcesView(title: media?.title ?? ref.title, aniListId: ref.aniListId, seriesId: series?.id) }
         .confirmationDialog("Eliminare l'episodio dal NAS?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
             Button("Elimina episodio \(deleting?.numberLabel ?? "")", role: .destructive) {
                 guard let ep = deleting else { return }
@@ -146,17 +147,27 @@ struct TVTitleView: View {
 
     @ViewBuilder private var similarRow: some View {
         if similar == nil { ProgressView().frame(maxWidth: .infinity) }
-        else if similar?.isEmpty == true { Text("Nessun titolo simile").font(DS.body(26)).foregroundStyle(DS.textTertiary).padding(.horizontal, 80) }
+        else if similar?.isEmpty == true && related.isEmpty { Text("Nessun titolo simile").font(DS.body(26)).foregroundStyle(DS.textTertiary).padding(.horizontal, 80) }
         else {
-            ScrollView(.horizontal) {
-                LazyHStack(alignment: .top, spacing: 40) {
+            // Rows of posters; the page itself scrolls down.
+            VStack(alignment: .leading, spacing: 20) {
+                if !related.isEmpty {
+                    Text("Stagioni e correlati").font(DS.display(34, 700)).padding(.horizontal, 80)
+                    LazyVGrid(columns: Array(repeating: GridItem(.fixed(260), spacing: 40, alignment: .top), count: 5), alignment: .leading, spacing: 50) {
+                        ForEach(Array(related.enumerated()), id: \.offset) { _, item in
+                            NavigationLink(value: item.ref) { TVPoster(title: item.ref.title, url: item.ref.posterURL, meta: item.relation) }.buttonStyle(.borderless)
+                        }
+                    }
+                    .padding(.horizontal, 80).padding(.bottom, 30)
+                    Text("Simili").font(DS.display(34, 700)).padding(.horizontal, 80)
+                }
+                LazyVGrid(columns: Array(repeating: GridItem(.fixed(260), spacing: 40, alignment: .top), count: 5), alignment: .leading, spacing: 50) {
                     ForEach(similar ?? [], id: \.self) { r in
                         NavigationLink(value: r) { TVPoster(title: r.title, url: r.posterURL) }.buttonStyle(.borderless)
                     }
                 }
                 .padding(.horizontal, 80).padding(.vertical, 30)
             }
-            .scrollClipDisabled()
         }
     }
 
@@ -193,10 +204,12 @@ struct TVTitleView: View {
         guard let id = ref.aniListId ?? media?.id else { similar = []; return }
         async let rec = try? session.api.aniListRecommendations(id)
         async let lib = try? session.api.library()
-        let (r, l) = await (rec, lib)
+        async let rel = try? session.api.aniListRelations(id)
+        let (r, l, rl) = await (rec, lib, rel)
         // Two NAS series can share one AniList id: keep the first instead of crashing.
         let onNAS = Dictionary((l ?? []).compactMap { s in s.aniListId.map { ($0, s) } }, uniquingKeysWith: { first, _ in first })
         var seen = Set<Int>()
+        related = (rl ?? []).map { ($0.relation, onNAS[$0.media.id].map(TitleRef.series) ?? .aniList($0.media)) }
         similar = (r ?? []).filter { $0.id != id && seen.insert($0.id).inserted }.map { m in onNAS[m.id].map(TitleRef.series) ?? .aniList(m) }
     }
 
@@ -210,8 +223,10 @@ struct TVTitleView: View {
 struct TVSourcesView: View {
     let title: String
     let aniListId: Int?
+    var seriesId: Int? = nil
     @Environment(AppSession.self) private var session
     @Environment(\.dismiss) private var dismiss
+    @State private var subtitleNote: String?
     @State private var providers: [ProviderInfo] = []
     @State private var provider: ProviderInfo?
     @State private var results: [SourceSearchResult] = []
@@ -266,6 +281,10 @@ struct TVSourcesView: View {
                         }
                         Button { Task { await send() } } label: { Label("Scarica sul NAS (\(selection.count))", systemImage: "externaldrive.badge.plus") }
                             .disabled(selection.isEmpty)
+                        if provider?.canSubtitles == true, seriesId != nil {
+                            Button { Task { await refreshSubtitles() } } label: { Label("Aggiorna solo i sottotitoli (ASS)", systemImage: "captions.bubble") }
+                            if let subtitleNote { Text(subtitleNote).font(DS.body(22)).foregroundStyle(DS.textSecondary) }
+                        }
                         Button("← Risultati") { self.picked = nil; episodes = [] }
                     } else {
                         Text("2 · Risultati").font(DS.display(30, 700))
@@ -307,6 +326,15 @@ struct TVSourcesView: View {
         picked = r; loading = true
         episodes = (try? await session.api.sourceEpisodes(source: provider.id, ref: r.ref)) ?? []
         selection = Set(episodes.map(\.ref)); loading = false
+    }
+
+    private func refreshSubtitles() async {
+        guard let provider, let picked, let seriesId else { return }
+        subtitleNote = "Invio…"
+        do {
+            let r = try await session.api.refreshSubtitles(seriesId: seriesId, source: provider.id, seriesRef: picked.ref)
+            subtitleNote = "\(r.queued) episodi in coda per i sottotitoli. Segui l'avanzamento in Download."
+        } catch { subtitleNote = error.localizedDescription }
     }
 
     private func send() async {

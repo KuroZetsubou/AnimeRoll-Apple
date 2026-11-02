@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var tg: TelegramStatus?
     @State private var tgNext: String?
     @State private var code = ""
+    @AppStorage(PlayerModel.audioLanguageKey) private var audioLanguage = ""
     @AppStorage(PlayerModel.autoNextKey) private var autoNext = PlayerModel.autoNextDefault
     @State private var channels: [TelegramChannel] = []
 
@@ -37,7 +38,20 @@ struct SettingsView: View {
                         }
                         .padding(.horizontal, 16).padding(.bottom, 14)
                     }
-                    group("Riproduzione", note: "Finito un episodio, parte il successivo dopo questo tempo. Annulli dal conto alla rovescia.") {
+                    group("Riproduzione", note: "Finito un episodio, parte il successivo dopo questo tempo. Il doppiaggio predefinito vale quando l'episodio ha più tracce audio; scegliendone un'altra nel player diventa il nuovo predefinito.") {
+                        HStack(spacing: 14) {
+                            Image(systemName: "waveform").foregroundStyle(DS.textSecondary).frame(width: 24)
+                            Text("Doppiaggio").font(DS.body(15, 500))
+                            Spacer()
+                            Picker("Doppiaggio", selection: $audioLanguage) {
+                                Text("Prima traccia").tag("")
+                                Text("Giapponese").tag("ja")
+                                Text("Italiano").tag("it")
+                                Text("Inglese").tag("en")
+                            }
+                            .tint(DS.accent)
+                        }
+                        .padding(.horizontal, 16).frame(minHeight: 52)
                         HStack(spacing: 14) {
                             Image(systemName: "forward.end").foregroundStyle(DS.textSecondary).frame(width: 24)
                             Text("Episodio successivo").font(DS.body(15, 500))

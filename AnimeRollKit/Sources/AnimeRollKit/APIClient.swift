@@ -148,6 +148,16 @@ public final class APIClient: @unchecked Sendable {
     }
     /// "Simili": what AniList recommends to people who liked this title.
     public func aniListRecommendations(_ id: Int) async throws -> [AniListMedia] { try await get("api/anilist/media/\(id)/recommendations") }
+    public func aniListRelations(_ id: Int) async throws -> [RelatedDTO] { try await get("api/anilist/media/\(id)/relations") }
+
+    /// Moves episodes to another series (by AniList id), e.g. when they were filed under the wrong season.
+    /// `numberOffset` is added to every episode number. Returns the id of the target series.
+    public func moveEpisodes(_ ids: [Int], toAniListId: Int, numberOffset: Double) async throws -> Int {
+        struct Body: Encodable { let episodeIds: [Int]; let aniListId: Int; let numberOffset: Double }
+        struct Reply: Decodable { let seriesId: Int }
+        let r: Reply = try await send("POST", "api/library/episodes/move", json: Body(episodeIds: ids, aniListId: toAniListId, numberOffset: numberOffset))
+        return r.seriesId
+    }
     public func aniListMedia(_ id: Int) async throws -> AniListMedia { try await get("api/anilist/media/\(id)") }
     public func aniListList(_ status: String) async throws -> [AniListEntry] { try await get("api/anilist/list/\(status)") }
     public func aniListEntry(_ mediaId: Int) async throws -> AniListEntry? {
@@ -192,6 +202,14 @@ public final class APIClient: @unchecked Sendable {
     /// fast start, subtitles). Shows up in the NAS download list as "Riparazione".
     public func repairEpisode(_ id: Int) async throws { _ = try await request("POST", "api/library/episodes/\(id)/repair") }
     public func repairSeries(_ id: Int) async throws { _ = try await request("POST", "api/library/series/\(id)/repair") }
+    /// Queues, for every episode of the series in the library, the original (ASS) subtitles from a source; no video is downloaded.
+    /// Returns how many episodes were queued and which numbers the source doesn't have.
+    public func refreshSubtitles(seriesId: Int, source: String, seriesRef: String) async throws -> (queued: Int, notFound: [Double]) {
+        struct Body: Encodable { let source: String; let seriesRef: String }
+        struct Reply: Decodable { let queued: Int; let notFound: [Double] }
+        let r: Reply = try await send("POST", "api/library/series/\(seriesId)/subtitles", json: Body(source: source, seriesRef: seriesRef))
+        return (r.queued, r.notFound)
+    }
     public func scanInbox() async throws -> Int {
         let r: [String: Int] = try await send("POST", "api/library/scan-inbox", json: [String: String]())
         return r["imported"] ?? 0

@@ -91,6 +91,7 @@ struct PlayerControls: View {
                         .transition(.opacity)
                 }
             }
+            .onChange(of: visible) { _, v in model.controlsVisible = v }
             .onChange(of: ctx.date) { _, now in
                 // The countdown starts when playback actually starts (or resumes), not when the screen opens.
                 if playing != wasPlaying { wasPlaying = playing; lastTouch = now }

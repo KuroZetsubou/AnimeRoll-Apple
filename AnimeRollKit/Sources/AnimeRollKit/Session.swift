@@ -29,7 +29,8 @@ public final class AppSession {
         defer { isRestoring = false }
         guard api.token != nil else { return }
         do {
-            setUser(try await api.me())
+            // Away from home the NAS can hang instead of refusing: give up after a few seconds and open offline.
+            setUser(try await Self.withTimeout(seconds: 8) { try await self.api.me() })
             isOffline = false
         } catch APIError.notLoggedIn {
             logout()
@@ -39,6 +40,25 @@ public final class AppSession {
             user = Self.cachedUser
             isOffline = user != nil
         }
+    }
+
+    private struct TimedOut: Error {}
+
+    private static func withTimeout<T: Sendable>(seconds: Double, _ work: @escaping @Sendable () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await work() }
+            group.addTask { try await Task.sleep(for: .seconds(seconds)); throw TimedOut() }
+            defer { group.cancelAll() }
+            return try await group.next()!
+        }
+    }
+
+    /// Opens the app without a login, only to play what is saved on this device (the NAS is unreachable
+    /// and there is no remembered user, e.g. right after a reinstall of the NAS-side account).
+    public func continueOffline() {
+        let json = #"{"id":"00000000-0000-0000-0000-000000000000","username":"Offline","aniListConnected":false,"passkeyCount":0}"#
+        user = try? APIClient.decoder.decode(UserDTO.self, from: Data(json.utf8))
+        isOffline = user != nil
     }
 
     /// Called when the app comes back to the foreground: leaves offline mode once the NAS answers.

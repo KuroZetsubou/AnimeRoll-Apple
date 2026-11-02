@@ -91,3 +91,20 @@ public extension Double {
         return m >= 60 ? "\(m / 60)h \(m % 60)m" : "\(m) min"
     }
 }
+
+
+/// Shown at launch while the app checks the login with the NAS.
+public struct LaunchLoadingView: View {
+    private let scale: CGFloat
+    public init(scale: CGFloat = 1) { self.scale = scale }
+
+    public var body: some View {
+        VStack(spacing: 28 * scale) {
+            (Text("Anime") + Text("Roll").foregroundStyle(DS.accent)).font(DS.display(52 * scale, 800)).tracking(-1)
+            ProgressView().controlSize(.large).tint(DS.accent)
+            Text("Caricamento…").font(DS.body(16 * scale)).foregroundStyle(DS.textSecondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(DS.background)
+    }
+}

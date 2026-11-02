@@ -113,10 +113,10 @@ private struct PlayerScreenContent: View {
                 }
             }
             .overlay(alignment: .topTrailing) {
-                if posture.isHalfOpen && fullScreen { fullScreenButton(expand: false).padding(.top, 70).padding(.trailing, wide && isEpisode ? 76 : 20) }
+                if posture.isHalfOpen && fullScreen, model?.controlsVisible ?? true { fullScreenButton(expand: false).padding(.top, 70).padding(.trailing, wide && isEpisode ? 76 : 20) }
             }
             .overlay(alignment: .topTrailing) {
-                if wide, isEpisode {
+                if wide, isEpisode, model?.controlsVisible ?? true {
                     Button { withAnimation(DS.base) { showEpisodes.toggle() } } label: {
                         Image(systemName: "sidebar.right").font(.headline).frame(width: 44, height: 44).glassCircle()
                     }

@@ -27,7 +27,8 @@ targets:
       # Passkeys need a paid developer account: add, under `properties:`,
       #   com.apple.developer.associated-domains: ["webcredentials:YOUR-NAS-DOMAIN"]
       # then run `xcodegen generate` again. See README.
-      properties: {}
+      properties:
+        com.apple.developer.associated-domains: ["webcredentials:anime.example.com"]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kurozetsubou.animeroll.tv

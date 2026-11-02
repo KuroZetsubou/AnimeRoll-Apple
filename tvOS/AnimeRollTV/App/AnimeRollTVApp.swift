@@ -13,7 +13,7 @@ struct AnimeRollTVApp: App {
         WindowGroup {
             Group {
                 if session.isRestoring {
-                    ProgressView()
+                    LaunchLoadingView(scale: 1.8)
                 } else if session.isLoggedIn {
                     TVMainView()
                 } else {
@@ -62,6 +62,7 @@ struct TVLoginView: View {
     @State private var password = ""
     @State private var error: String?
     @State private var busy = false
+    @Environment(OfflineDownloads.self) private var offline
 
     var body: some View {
         @Bindable var session = session
@@ -77,6 +78,9 @@ struct TVLoginView: View {
                 Button("Accedi") { run { try await session.login(username: username, password: password) } }
                     .disabled(username.isEmpty || password.isEmpty || busy)
                 Button("Accedi con passkey (iPhone)") { run { try await session.loginWithPasskey(username: username) } }
+                if !offline.items.isEmpty {
+                    Button("Guarda i download offline") { session.continueOffline() }
+                }
                 if let error { Text(error).foregroundStyle(.red) }
             }
             .frame(width: 760)
