@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var tg: TelegramStatus?
     @State private var tgNext: String?
     @State private var code = ""
+    @AppStorage(PlayerModel.autoNextKey) private var autoNext = PlayerModel.autoNextDefault
     @State private var channels: [TelegramChannel] = []
 
     var body: some View {
@@ -35,6 +36,19 @@ struct SettingsView: View {
                             }
                         }
                         .padding(.horizontal, 16).padding(.bottom, 14)
+                    }
+                    group("Riproduzione", note: "Finito un episodio, parte il successivo dopo questo tempo. Annulli dal conto alla rovescia.") {
+                        HStack(spacing: 14) {
+                            Image(systemName: "forward.end").foregroundStyle(DS.textSecondary).frame(width: 24)
+                            Text("Episodio successivo").font(DS.body(15, 500))
+                            Spacer()
+                            Picker("Episodio successivo", selection: $autoNext) {
+                                Text("Spento").tag(0)
+                                ForEach([3, 5, 10, 15], id: \.self) { Text("\($0) secondi").tag($0) }
+                            }
+                            .tint(DS.accent)
+                        }
+                        .padding(.horizontal, 16).frame(minHeight: 52)
                     }
                     group("Passkey") {
                         ForEach(passkeys) { p in

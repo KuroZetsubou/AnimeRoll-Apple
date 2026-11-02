@@ -71,6 +71,10 @@ struct PlayerControls: View {
     @State private var scrubbing: Double?
     @State private var showEpisodes = false
     @State private var wasPlaying = false
+    /// Short screens (the closed iPhone Duo): one bottom row instead of scrubber + times + actions stacked.
+    @State private var compact = false
+    /// Safe area of the screen (before the controls ignore it): the large side is the camera cutout of the closed Duo.
+    @State private var insets = EdgeInsets()
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.25)) { ctx in
@@ -78,6 +82,7 @@ struct PlayerControls: View {
             let current = scrubbing ?? finite(model.player.currentTime().seconds)
             let playing = model.player.rate != 0
             ZStack {
+                Color.clear.allowsHitTesting(false).onGeometryChange(for: EdgeInsets.self, of: { $0.safeAreaInsets }) { insets = $0 }
                 // Tap target over the video.
                 Color.black.opacity(0.001)
                     .onTapGesture { withAnimation(DS.base) { visible.toggle() }; lastTouch = .now }
@@ -102,23 +107,11 @@ struct PlayerControls: View {
     }
 
     private func controls(current: Double, duration: Double, playing: Bool) -> some View {
-        VStack(spacing: 0) {
-            // Top: close, title, PiP, AirPlay.
-            HStack(alignment: .top, spacing: 8) {
-                roundButton("chevron.down", "Chiudi", action: close)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(model.title).font(DS.display(22, 800)).lineLimit(1)
-                    Text(model.subtitle).font(DS.body(13)).foregroundStyle(DS.textSecondary).lineLimit(1)
-                }
-                Spacer()
-                if pip.available { roundButton("pip.enter", "Picture in Picture") { pip.toggle() } }
-                AirPlayButton().frame(width: 44, height: 44)
-            }
-
-            Spacer()
-
-            // Centre: -10, play / pause, +10.
-            HStack(spacing: 32) {
+        ZStack {
+        // Centre of the picture (not of what is left between the top and bottom rows): -10, play / pause, +10.
+        GeometryReader { geo in
+            let video = SubtitleOverlay.fittedRect(video: model.videoSize, in: geo.size)
+        HStack(spacing: 32) {
                 glassRound("gobackward.10", 56, "Indietro 10 secondi") { touch(); model.skip(seconds: -10) }
                 Button { touch(); Haptics.tick(); model.togglePlayPause() } label: {
                     Image(systemName: playing ? "pause.fill" : "play.fill").font(.system(size: 32, weight: .bold))
@@ -128,8 +121,27 @@ struct PlayerControls: View {
                 .buttonStyle(.plain).accessibilityLabel(playing ? "Pausa" : "Riproduci")
                 glassRound("goforward.10", 56, "Avanti 10 secondi") { touch(); model.skip(seconds: 10) }
             }
+            .position(x: geo.size.width / 2, y: video.midY)
+        }
+        VStack(spacing: 0) {
+            // Top: close, title, PiP, AirPlay.
+            HStack(alignment: .top, spacing: 8) {
+                roundButton("chevron.down", "Chiudi", action: close)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(model.title).font(DS.display(compact ? 16 : 22, 800)).lineLimit(1)
+                    if !compact { Text(model.subtitle).font(DS.body(13)).foregroundStyle(DS.textSecondary).lineLimit(1) }
+                }
+                .frame(minHeight: compact ? 44 : 0, alignment: .leading)
+                Spacer()
+                if pip.available { roundButton("pip.enter", "Picture in Picture") { pip.toggle() } }
+                AirPlayButton().frame(width: 44, height: 44)
+            }
+            .padding(.leading, cutLeading ? insets.leading : 0)
 
             Spacer()
+
+            // The camera cutout sits in one corner of the closed Duo: only the row next to it stays out of that side.
+            VStack(spacing: 0) {
 
             // Bottom: skip intro / next up, scrubber, times, actions.
             HStack(alignment: .bottom) {
@@ -152,12 +164,22 @@ struct PlayerControls: View {
                     .glassRect()
                 }
             }
-            .frame(minHeight: 40).padding(.bottom, 12)
+            .frame(minHeight: 40).padding(.bottom, compact ? 4 : 12)
 
-            Scrubber(value: current, duration: duration) { t in touch(); scrubbing = t } onEnd: { t in
-                model.player.seek(to: CMTime(seconds: t, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
-                scrubbing = nil
-            }
+            if compact {
+                // One row at the bottom: episodes, time, bar, remaining, audio / subtitles / next.
+                HStack(spacing: 10) {
+                    if isEpisode { roundButton("list.bullet.rectangle", "Episodi") { showEpisodes = true } }
+                    Text(timeLabel(current)).font(DS.body(12, 600).monospacedDigit())
+                    scrubber(current: current, duration: duration)
+                    Text("-" + timeLabel(max(0, duration - current))).font(DS.body(12, 600).monospacedDigit()).foregroundStyle(DS.textSecondary)
+                    AudioMenu(model: model, compact: true)
+                    SubtitleMenu(controller: model.subtitles, compact: true)
+                    if model.nextEpisode != nil { roundButton("forward.end.fill", "Episodio successivo") { Task { await model.playNext() } } }
+                }
+                .padding(.trailing, cutTrailing ? insets.trailing : 0)
+            } else {
+            scrubber(current: current, duration: duration)
             HStack {
                 Text(timeLabel(current)); Spacer(); Text("-" + timeLabel(max(0, duration - current))).foregroundStyle(DS.textSecondary)
             }
@@ -169,19 +191,37 @@ struct PlayerControls: View {
                         .buttonStyle(GhostButtonStyle())
                 }
                 Spacer()
+                AudioMenu(model: model)
                 SubtitleMenu(controller: model.subtitles)
                 if model.nextEpisode != nil {
                     roundButton("forward.end.fill", "Episodio successivo") { Task { await model.playNext() } }
                 }
             }
+            .padding(.trailing, cutTrailing ? insets.trailing : 0)
+            }
+            }
+        }
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, 20).padding(.vertical, 16)
+        .padding(.horizontal, 20).padding(.vertical, compact ? 6 : 16)
+        // Use the whole width: the empty strip the system reserves would otherwise stay unused.
+        .ignoresSafeArea(.container, edges: .horizontal)
+        .onGeometryChange(for: Bool.self, of: { $0.size.height < 430 }) { compact = $0 }
         .background {
             LinearGradient(stops: [.init(color: DS.ink950.opacity(0.55), location: 0), .init(color: .clear, location: 0.3),
                                    .init(color: .clear, location: 0.55), .init(color: DS.ink950.opacity(0.85), location: 1)],
                            startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea().allowsHitTesting(false)
+        }
+    }
+
+    private var cutLeading: Bool { insets.leading > insets.trailing && insets.leading > 40 }
+    private var cutTrailing: Bool { insets.trailing > insets.leading && insets.trailing > 40 }
+
+    private func scrubber(current: Double, duration: Double) -> some View {
+        Scrubber(value: current, duration: duration) { t in touch(); scrubbing = t } onEnd: { t in
+            model.player.seek(to: CMTime(seconds: t, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+            scrubbing = nil
         }
     }
 

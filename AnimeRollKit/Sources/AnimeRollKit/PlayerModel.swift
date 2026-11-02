@@ -26,12 +26,32 @@ public enum PlaybackItem: Hashable, Identifiable, Sendable {
 @MainActor
 @Observable
 public final class PlayerModel {
+    /// One audio track of the stream (dubs): name from the file's language tag.
+    public struct AudioOption: Identifiable, Hashable, Sendable {
+        public let id: Int
+        public let name: String
+        public let language: String?
+    }
+    private static let audioLanguageKey = "preferredAudioLanguage"
+
     public let player: AVPlayer
     public private(set) var title = ""
     public private(set) var subtitle = ""
     public private(set) var currentEpisode: EpisodeDTO?
     public private(set) var nextEpisode: EpisodeDTO?
     public private(set) var showNextUp = false
+    /// Audio tracks of the current episode (only worth showing with more than one) and the one playing.
+    public private(set) var audioOptions: [AudioOption] = []
+    public private(set) var selectedAudio: Int?
+    @ObservationIgnored private var audioGroup: AVMediaSelectionGroup?
+    /// MP4s with several audio tracks but no "alternate group" (what ffmpeg writes) have no selection group:
+    /// the tracks are then switched on and off one by one.
+    @ObservationIgnored private var audioTrackIDs: [CMPersistentTrackID] = []
+    /// Seconds left before the next episode starts by itself, nil when no countdown is running.
+    public private(set) var autoNextIn: Int?
+    /// Profile setting: seconds to wait after an episode ends before playing the next one (0 = off).
+    public static let autoNextKey = "autoNextDelay"
+    public static let autoNextDefault = 5
     public private(set) var isLoading = true
     /// Natural size of the picture, used to place subtitles on the video and not on the black bars.
     public private(set) var videoSize: CGSize = .zero
@@ -48,6 +68,8 @@ public final class PlayerModel {
     @ObservationIgnored private var stopped = false
     @ObservationIgnored private var reporting = false
     @ObservationIgnored private var kvo: [NSKeyValueObservation] = []
+    @ObservationIgnored private var endObserver: NSObjectProtocol?
+    @ObservationIgnored private var countdown: Task<Void, Never>?
     @ObservationIgnored private var startedAt = ContinuousClock.now
     @ObservationIgnored private let log = Logger(subsystem: "com.kurozetsubou.animeroll", category: "player")
 
@@ -85,6 +107,7 @@ public final class PlayerModel {
         startedAt = .now
         isLoading = true
         currentEpisode = ep
+        cancelAutoNext()
         setShowNextUp(false)
         title = series?.title ?? ""
         subtitle = "Episodio \(ep.numberLabel)" + (ep.title.map { $0.hasPrefix("Episodio") ? "" : " · \($0)" } ?? "")
@@ -109,8 +132,37 @@ public final class PlayerModel {
 
     public func playNext() async {
         guard let next = nextEpisode else { return }
+        cancelAutoNext()
         await report(force: true)
         await play(next)
+    }
+
+    /// The episode ended and there is a next one: count down, then play it. Cancel keeps the player where it is.
+    private func beginAutoNext() {
+        log.info("AUTONEXT end next=\(self.nextEpisode?.number ?? -1, privacy: .public) stopped=\(self.stopped, privacy: .public) playlist=\(self.playlistEpisodes.count, privacy: .public)")
+        guard nextEpisode != nil, !stopped, autoNextIn == nil else { return }
+        let stored = UserDefaults.standard.object(forKey: Self.autoNextKey) as? Int ?? Self.autoNextDefault
+        guard stored > 0 else { return }
+        autoNextIn = stored
+        countdown = Task { [weak self] in
+            var left = stored
+            while left > 0 {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled, let self else { return }
+                left -= 1
+                self.autoNextIn = left
+            }
+            guard !Task.isCancelled, let self else { return }
+            // Detach first: playNext() cancels the countdown, and this task is the one running it.
+            self.autoNextIn = nil
+            self.countdown = nil
+            await self.playNext()
+        }
+    }
+
+    public func cancelAutoNext() {
+        countdown?.cancel(); countdown = nil
+        if autoNextIn != nil { autoNextIn = nil }
     }
 
     public func skip(seconds: Double) {
@@ -128,6 +180,9 @@ public final class PlayerModel {
     public func stop() async {
         guard !stopped else { return }
         stopped = true
+        cancelAutoNext()
+        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
+        endObserver = nil
         player.pause()
         await report(force: true)
         if let timeObserver { player.removeTimeObserver(timeObserver) }
@@ -141,6 +196,10 @@ public final class PlayerModel {
 
     private func start(_ item: AVPlayerItem, resumeAt: Double?) {
         watch(item)
+        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
+        endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.beginAutoNext() }
+        }
         player.replaceCurrentItem(with: item)
         if let resumeAt, resumeAt > 5 {
             // Queued until the item is ready; play() is NOT delayed waiting for it.
@@ -160,6 +219,7 @@ public final class PlayerModel {
                         self.log.info("TIMING item ready +\(self.elapsed, privacy: .public)")
                         self.quickStartIfBuffered(item)
                         await Self.disableEmbeddedSubtitles(item)
+                        await self.loadAudio(item)
                     case .failed:
                         self.error = item.error?.localizedDescription ?? "Impossibile riprodurre il video."
                         self.isLoading = false
@@ -185,6 +245,80 @@ public final class PlayerModel {
                 }
             },
         ]
+    }
+
+    private func loadAudio(_ item: AVPlayerItem) async {
+        audioOptions = []; selectedAudio = nil; audioGroup = nil; audioTrackIDs = []
+        guard let group = try? await item.asset.loadMediaSelectionGroup(for: .audible), group.options.count > 1 else {
+            await loadAudioTracks(item)
+            return
+        }
+        guard item === player.currentItem else { return }
+        let locale = Locale.current
+        var names = group.options.map { opt -> String in
+            if let id = opt.locale?.identifier, let n = locale.localizedString(forIdentifier: id) { return n.capitalized }
+            return opt.displayName
+        }
+        // Same language twice (stereo + 5.1, two dubs): number them so they can be told apart.
+        for (i, n) in names.enumerated() where names.filter({ $0 == n }).count > 1 {
+            names[i] = "\(n) \(names[0...i].filter { $0.hasPrefix(n) }.count)"
+        }
+        audioGroup = group
+        audioOptions = group.options.enumerated().map {
+            AudioOption(id: $0.offset, name: names[$0.offset], language: $0.element.locale?.language.languageCode?.identifier)
+        }
+        // The language picked on a previous episode stays the default.
+        if let pref = UserDefaults.standard.string(forKey: Self.audioLanguageKey),
+           let match = audioOptions.first(where: { $0.language == pref }) {
+            item.select(group.options[match.id], in: group)
+            selectedAudio = match.id
+        } else if let cur = item.currentMediaSelection.selectedMediaOption(in: group), let i = group.options.firstIndex(of: cur) {
+            selectedAudio = i
+        }
+    }
+
+    private func loadAudioTracks(_ item: AVPlayerItem) async {
+        guard let tracks = try? await item.asset.loadTracks(withMediaType: .audio), tracks.count > 1,
+              item === player.currentItem else { return }
+        let locale = Locale.current
+        var options: [AudioOption] = []
+        for (i, t) in tracks.enumerated() {
+            var tag = try? await t.load(.extendedLanguageTag)
+            if tag == nil { tag = try? await t.load(.languageCode) }
+            let code = tag.flatMap { $0 == "und" ? nil : $0 }
+            let name = code.flatMap { locale.localizedString(forIdentifier: $0)?.capitalized } ?? "Audio \(i + 1)"
+            options.append(AudioOption(id: i, name: name, language: code.flatMap { Locale(identifier: $0).language.languageCode?.identifier }))
+        }
+        for (i, o) in options.enumerated() where options.filter({ $0.name == o.name }).count > 1 {
+            options[i] = AudioOption(id: o.id, name: "\(o.name) \(options[0...i].filter { $0.name == o.name }.count)", language: o.language)
+        }
+        audioTrackIDs = tracks.map(\.trackID)
+        audioOptions = options
+        let pref = UserDefaults.standard.string(forKey: Self.audioLanguageKey)
+        enableAudioTrack(options.first { $0.language == pref }?.id ?? 0, in: item)
+    }
+
+    private func enableAudioTrack(_ id: Int, in item: AVPlayerItem) {
+        for t in item.tracks where t.assetTrack?.mediaType == .audio {
+            t.isEnabled = t.assetTrack?.trackID == audioTrackIDs[id]
+        }
+        selectedAudio = id
+    }
+
+    public func selectAudio(_ id: Int) {
+        if audioGroup == nil, let item = player.currentItem, audioTrackIDs.indices.contains(id) {
+            enableAudioTrack(id, in: item)
+            if let lang = audioOptions.first(where: { $0.id == id })?.language {
+                UserDefaults.standard.set(lang, forKey: Self.audioLanguageKey)
+            }
+            return
+        }
+        guard let item = player.currentItem, let group = audioGroup, group.options.indices.contains(id) else { return }
+        item.select(group.options[id], in: group)
+        selectedAudio = id
+        if let lang = audioOptions.first(where: { $0.id == id })?.language {
+            UserDefaults.standard.set(lang, forKey: Self.audioLanguageKey)
+        }
     }
 
     /// Old episodes may still carry mov_text tracks: never show them on top of ours.

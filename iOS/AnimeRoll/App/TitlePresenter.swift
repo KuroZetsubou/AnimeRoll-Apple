@@ -17,6 +17,8 @@ extension EnvironmentValues {
 /// Lets the detail tell the sheet whether it is scrolled to the top (drag-to-close only then).
 @MainActor @Observable final class TitleSheetContext {
     var atTop = true
+    /// The system reserves a vertical strip at the side (iPhone Duo): Back lives there, with the tabs.
+    var backOnSide = false
     let close: () -> Void
     init(close: @escaping () -> Void) { self.close = close }
 }
@@ -28,6 +30,7 @@ struct TitleSheetHost: ViewModifier {
     @State private var drag: CGSize = .zero
     @State private var context: TitleSheetContext?
     @State private var size: CGSize = .zero
+    @State private var sideInset: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let closeDistance: CGFloat = 120
@@ -59,6 +62,20 @@ struct TitleSheetHost: ViewModifier {
         }
         .background(Color.black.ignoresSafeArea())
         .onGeometryChange(for: CGSize.self, of: \.size) { size = $0 }
+        .onGeometryChange(for: CGFloat.self, of: { $0.safeAreaInsets.trailing }) { sideInset = $0; context?.backOnSide = $0 >= 48 }
+        // Back at the top of the vertical axis: right next to the strip the system keeps for tabs and status
+        // (views drawn inside that strip do not receive touches).
+        .overlay(alignment: .topTrailing) {
+            if presented != nil, sideInset >= 48 {
+                Button { Haptics.tick(); close() } label: {
+                    Image(systemName: "chevron.left").font(.title3.bold()).foregroundStyle(.white)
+                        .frame(width: 56, height: 56).glassCircle()
+                }
+                .accessibilityLabel("Indietro")
+                .padding(.top, 120).padding(.trailing, 12)
+                .transition(.opacity)
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .showDownloads)) { _ in close() }
     }
 
@@ -85,6 +102,7 @@ struct TitleSheetHost: ViewModifier {
         Haptics.tick()
         drag = .zero
         context = TitleSheetContext { [self] in close() }
+        context?.backOnSide = sideInset >= 48
         withAnimation(.easeOut(duration: 0.35)) { presented = ref }
     }
 

@@ -44,3 +44,29 @@ struct SubtitleMenu: View {
             : (controller.offset > 0 ? "+" : "") + controller.offset.formatted(.number.precision(.fractionLength(2))) + " s"
     }
 }
+
+/// Audio track / dub choice. Hidden when the episode has a single track.
+struct AudioMenu: View {
+    let model: PlayerModel
+    var compact = false
+
+    var body: some View {
+        if model.audioOptions.count > 1 {
+            Menu {
+                Section("Audio") {
+                    ForEach(model.audioOptions) { option in
+                        Button { model.selectAudio(option.id) } label: {
+                            if model.selectedAudio == option.id { Label(option.name, systemImage: "checkmark") } else { Text(option.name) }
+                        }
+                    }
+                }
+            } label: {
+                Image(systemName: "waveform")
+                    .font(compact ? .subheadline : .headline)
+                    .padding(compact ? 8 : 10)
+                    .background(.ultraThinMaterial, in: .circle)
+            }
+            .accessibilityLabel("Audio")
+        }
+    }
+}

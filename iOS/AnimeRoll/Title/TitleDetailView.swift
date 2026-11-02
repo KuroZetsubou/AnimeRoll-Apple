@@ -187,8 +187,9 @@ struct TitleDetailView: View {
                 .overlay(DS.scrimBottom)
                 .clipped()
                 .overlay(alignment: .topLeading) {
-                    if let sheet {
-                        Button { sheet.close() } label: {
+                    // On the iPhone Duo the sheet host draws Back on the side, in the column of the tabs.
+                    if let sheet, !sheet.backOnSide {
+                        Button { Haptics.tick(); sheet.close() } label: {
                             Image(systemName: "chevron.left").font(.body.bold()).foregroundStyle(.white)
                                 .frame(width: 44, height: 44).glassCircle()
                         }

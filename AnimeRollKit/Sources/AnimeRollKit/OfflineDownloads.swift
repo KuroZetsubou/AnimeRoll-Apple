@@ -113,6 +113,8 @@ public final class OfflineDownloads: NSObject {
             let file = Self.folder.appending(path: "\(episodeId).s\(t.index).vtt")
             guard FileManager.default.fileExists(atPath: file.path) else { return nil }
             var local = t; local.url = file
+            let ass = Self.folder.appending(path: "\(episodeId).s\(t.index).ass")
+            local.assUrl = FileManager.default.fileExists(atPath: ass.path) ? ass : nil
             return local
         }
     }
@@ -124,6 +126,15 @@ public final class OfflineDownloads: NSObject {
             guard let (data, res) = try? await URLSession.shared.data(from: t.url),
                   (res as? HTTPURLResponse)?.statusCode == 200 else { continue }
             try? data.write(to: Self.folder.appending(path: "\(episodeId).s\(t.index).vtt"), options: .atomic)
+            // The original ASS with its fonts, for the libass renderer (offline too).
+            if let assUrl = t.assUrl {
+                var comps = URLComponents(url: assUrl, resolvingAgainstBaseURL: false)
+                let items = comps?.queryItems ?? []
+                comps?.queryItems = items + [URLQueryItem(name: "embed", value: "1")]
+                if let target = comps?.url, let (ass, r) = try? await URLSession.shared.data(from: target), (r as? HTTPURLResponse)?.statusCode == 200 {
+                    try? ass.write(to: Self.folder.appending(path: "\(episodeId).s\(t.index).ass"), options: .atomic)
+                }
+            }
             saved.append(t)
         }
         if let json = try? APIClient.encoder.encode(saved) {

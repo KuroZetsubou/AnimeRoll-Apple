@@ -15,7 +15,14 @@ struct TVPlayerView: View {
                                subtitles: model.subtitles, menuState: menuState(model.subtitles))
                     .ignoresSafeArea()
                 SubtitleOverlay(controller: model.subtitles, videoSize: model.videoSize).ignoresSafeArea()
-                if model.showNextUp, let next = model.nextEpisode {
+                if let left = model.autoNextIn, let next = model.nextEpisode {
+                    HStack(spacing: 24) {
+                        Text("Episodio \(next.numberLabel) tra \(left) s")
+                        Button("Annulla") { model.cancelAutoNext() }
+                        Button("Avvia") { Task { await model.playNext() } }
+                    }
+                    .padding(80)
+                } else if model.showNextUp, let next = model.nextEpisode {
                     Button("Episodio \(next.numberLabel) ▸") { Task { await model.playNext() } }
                         .padding(80)
                 }

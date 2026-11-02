@@ -86,7 +86,7 @@ private struct PlayerScreenContent: View {
                 HStack {
                     closeButton
                     Spacer()
-                    if let model { SubtitleMenu(controller: model.subtitles) }
+                    if let model { AudioMenu(model: model); SubtitleMenu(controller: model.subtitles) }
                     fullScreenButton(expand: true)
                 }
                 .padding()
@@ -108,6 +108,8 @@ private struct PlayerScreenContent: View {
                     PlayerSurface(player: model.player, pip: pip).ignoresSafeArea()
                     SubtitleOverlay(controller: model.subtitles, videoSize: model.videoSize).ignoresSafeArea().allowsHitTesting(false)
                     PlayerControls(model: model, pip: pip, isEpisode: isEpisode && !(wide && showEpisodes), close: close)
+                    // Outside the controls, which hide after 3 s: the countdown has to stay visible.
+                    NextUpOverlay(model: model, countdownOnly: true)
                 }
             }
             .overlay(alignment: .topTrailing) {
@@ -163,6 +165,7 @@ private struct TabletopControls: View {
                     Text(model.subtitle).font(DS.body(14)).foregroundStyle(DS.textSecondary).lineLimit(1)
                 }
                 Spacer(minLength: 8)
+                AudioMenu(model: model)
                 SubtitleMenu(controller: model.subtitles)
                 if let expand {
                     Button { Haptics.tick(); expand() } label: {
@@ -261,7 +264,7 @@ struct InlinePlayer: View {
                 LoadingOverlay(model: model)
             }
             HStack(spacing: 8) {
-                if let model { SubtitleMenu(controller: model.subtitles, compact: true) }
+                if let model { AudioMenu(model: model, compact: true); SubtitleMenu(controller: model.subtitles, compact: true) }
                 if let expand {
                     Button { Task { await model?.stop(); expand() } } label: {
                         Image(systemName: "arrow.up.left.and.arrow.down.right").padding(8).background(.ultraThinMaterial, in: .circle)
@@ -298,8 +301,24 @@ private struct LoadingOverlay: View {
 
 private struct NextUpOverlay: View {
     let model: PlayerModel
+    /// The full-screen controls draw their own "next up" card; only the end-of-episode countdown is added.
+    var countdownOnly = false
     var body: some View {
-        if model.showNextUp, let next = model.nextEpisode {
+        if let left = model.autoNextIn, let next = model.nextEpisode {
+            // The episode ended: countdown to the next one.
+            VStack { Spacer(); HStack { Spacer()
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Prossimo episodio tra \(left) s").font(DS.body(12)).foregroundStyle(DS.textSecondary)
+                        Text("E\(next.numberLabel)\(next.title.map { " · \($0)" } ?? "")").font(DS.body(14, 700)).lineLimit(1)
+                    }
+                    Button("Annulla") { model.cancelAutoNext() }.buttonStyle(PrimaryButtonStyle(prominent: false, small: true))
+                    Button("Avvia") { Task { await model.playNext() } }.buttonStyle(PrimaryButtonStyle(small: true))
+                }
+                .padding(14).glassRect()
+                .padding(.trailing, 24).padding(.bottom, 90)
+            } }
+        } else if !countdownOnly, model.showNextUp, let next = model.nextEpisode {
             VStack { Spacer(); HStack { Spacer()
                 Button { Task { await model.playNext() } } label: {
                     Label("Episodio \(next.numberLabel)", systemImage: "forward.end.fill").padding(.horizontal, 6)
