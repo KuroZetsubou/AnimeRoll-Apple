@@ -242,6 +242,7 @@ struct TitleDetailView: View {
                 if !model.episodes.isEmpty { BadgeLabel(text: "Sul NAS") }
             }
             .padding(.top, 4)
+            nextAiringRow
         }
     }
 
@@ -274,6 +275,12 @@ struct TitleDetailView: View {
         if let n = model.media?.episodes ?? model.series?.totalEpisodes { parts.append("\(n) episodi") }
         if let s = model.media?.averageScore { parts.append("★ \(s)%") }
         return parts.joined(separator: " · ")
+    }
+
+    @ViewBuilder private var nextAiringRow: some View {
+        if let t = model.media?.nextAiringText {
+            Label(t, systemImage: "calendar").font(DS.body(13)).foregroundStyle(DS.teal)
+        }
     }
 
     // MARK: Buttons

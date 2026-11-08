@@ -34,6 +34,16 @@ public struct AniListMedia: Codable, Hashable, Identifiable, Sendable {
     public let genres: [String]
     public let averageScore: Int?
     public let nextAiringEpisode: Int?
+    public let nextAiringAt: Int64?
+
+    /// "E5 · sab 8 nov, 18:30" for ongoing series, nil when AniList has no schedule.
+    public var nextAiringText: String? {
+        guard let ep = nextAiringEpisode, let at = nextAiringAt else { return nil }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "it_IT")
+        f.setLocalizedDateFormatFromTemplate("EEE d MMM HH:mm")
+        return "Prossimo episodio (E\(ep)): \(f.string(from: Date(timeIntervalSince1970: TimeInterval(at))))"
+    }
 
     public var plainDescription: String {
         (description ?? "")

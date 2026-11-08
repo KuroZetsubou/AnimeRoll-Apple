@@ -34,6 +34,9 @@ struct TVTitleView: View {
                             Text(meta).font(DS.body(26)).foregroundStyle(DS.textSecondary)
                             if !episodes.isEmpty { TVBadge(text: "Sul NAS") }
                         }
+                        if let t = media?.nextAiringText {
+                            Label(t, systemImage: "calendar").font(DS.body(26)).foregroundStyle(DS.teal)
+                        }
                         if let e = entry {
                             Label("AniList: guardati \(e.progress)/\(media?.episodes.map(String.init) ?? "?") · \(AniListStatusLabel.text(e.status))", systemImage: "link")
                                 .font(DS.body(26)).foregroundStyle(DS.teal)
