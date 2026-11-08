@@ -69,7 +69,8 @@ final class TitleModel {
     /// First not-completed episode, for the big "Riproduci" button.
     var nextToWatch: EpisodeDTO? {
         let watchedOnAniList = Double(entry?.progress ?? 0)
-        return episodes.first { !$0.completed && $0.number > watchedOnAniList } ?? episodes.first { !$0.completed } ?? episodes.first
+        let regular = episodes.filter { !$0.extra }
+        return regular.first { !$0.completed && $0.number > watchedOnAniList } ?? regular.first { !$0.completed } ?? episodes.first
     }
 }
 
@@ -98,6 +99,7 @@ struct TitleDetailView: View {
     @State private var deletingSeries = false
     @State private var deleteError: String?
     @State private var moving: [EpisodeDTO]?
+    @State private var editing: EpisodeDTO?
 
     init(ref: TitleRef, inlinePlayer: Bool = false) {
         self.ref = ref
@@ -156,6 +158,10 @@ struct TitleDetailView: View {
             Button("OK", role: .cancel) {}
         } message: { Text(deleteError ?? "") }
         .sheet(item: movingItem) { batch in moveSheet(batch) }
+        .sheet(item: $editing) { ep in
+            EditEpisodeSheet(episode: ep) { editing = nil; Task { await model.load(session.api) } }
+                .presentationDetents([.medium])
+        }
         .sheet(isPresented: $showStatus) { statusSheet }
         .sheet(isPresented: $showSources, onDismiss: { Task { await model.load(session.api) } }) {
             SourcesSheet(title: model.title, aniListId: ref.aniListId, seriesId: model.series?.id) { url, label in
@@ -358,8 +364,8 @@ struct TitleDetailView: View {
             let shown = showAll ? model.episodes : Array(model.episodes.prefix(12))
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(shown) { ep in
-                    EpisodeRow(episode: ep, series: model.series, watchedOnAniList: Double(model.entry?.progress ?? 0) >= ep.number,
-                               playing: inlineItem?.id == "ep-\(ep.id)", onDelete: { deleting = ep }, onMove: { moving = [ep] }) {
+                    EpisodeRow(episode: ep, series: model.series, watchedOnAniList: !ep.extra && Double(model.entry?.progress ?? 0) >= ep.number,
+                               playing: inlineItem?.id == "ep-\(ep.id)", onDelete: { deleting = ep }, onMove: { moving = [ep] }, onEdit: { editing = ep }) {
                         Haptics.tick(); play(ep)
                     }
                 }
@@ -421,6 +427,7 @@ struct EpisodeRow: View {
     var playing = false
     var onDelete: (() -> Void)? = nil
     var onMove: (() -> Void)? = nil
+    var onEdit: (() -> Void)? = nil
     let play: () -> Void
     @Environment(AppSession.self) private var session
     @Environment(OfflineDownloads.self) private var offline
@@ -460,6 +467,9 @@ struct EpisodeRow: View {
             }
             if let file = offline.localURL(for: episode.id) {
                 ShareLink(item: file) { Label("Apri con…", systemImage: "square.and.arrow.up") }
+            }
+            if let onEdit {
+                Button("Modifica numero…", systemImage: "pencil", action: onEdit)
             }
             if let onMove {
                 Button("Sposta in un'altra serie…", systemImage: "arrow.right.circle", action: onMove)
@@ -542,6 +552,56 @@ struct AniListStatusSheet: View {
     }
 }
 
+
+/// "Modifica numero": fixes the number of one episode by hand, or marks it as an extra (EX1) that AniList never counts.
+struct EditEpisodeSheet: View {
+    let episode: EpisodeDTO
+    let done: () -> Void
+
+    @Environment(AppSession.self) private var session
+    @State private var number: String
+    @State private var isExtra: Bool
+    @State private var busy = false
+    @State private var error: String?
+
+    init(episode: EpisodeDTO, done: @escaping () -> Void) {
+        self.episode = episode; self.done = done
+        _number = State(initialValue: episode.number.rounded() == episode.number ? String(Int(episode.number)) : String(episode.number))
+        _isExtra = State(initialValue: episode.extra)
+    }
+
+    private var parsed: Double? { Double(number.replacingOccurrences(of: ",", with: ".")) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Modifica numero").font(DS.display(22, 800)).padding(.top, 24)
+            TextField("Numero", text: $number).keyboardType(.decimalPad).font(DS.body(18))
+                .padding(14).background(DS.surface, in: .rect(cornerRadius: DS.rCard))
+            Toggle(isOn: $isExtra) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Contenuto extra").font(DS.body(15, 600))
+                    Text("Compare come EX\(number) e non conta per il progresso su AniList.").font(DS.body(12)).foregroundStyle(DS.textTertiary)
+                }
+            }
+            if let error { Text(error).font(DS.body(13)).foregroundStyle(.red) }
+            Button { save() } label: { Text("Salva").frame(maxWidth: .infinity) }
+                .buttonStyle(PrimaryButtonStyle()).disabled(parsed == nil || busy)
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .background(DS.background.ignoresSafeArea())
+    }
+
+    private func save() {
+        guard let n = parsed else { return }
+        busy = true; error = nil
+        Task {
+            do { try await session.api.editEpisode(episode.id, number: n, isExtra: isExtra); done() }
+            catch { self.error = error.localizedDescription }
+            busy = false
+        }
+    }
+}
 
 struct MoveBatch: Identifiable { let episodes: [EpisodeDTO]; var id: String { episodes.map { String($0.id) }.joined(separator: ",") } }
 

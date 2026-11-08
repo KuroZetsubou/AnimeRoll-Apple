@@ -84,9 +84,15 @@ public struct EpisodeDTO: Codable, Hashable, Identifiable, Sendable {
     public let source: String
     public let positionSeconds: Double?
     public let completed: Bool
+    public let isExtra: Bool?
 
+    /// Bonus content (EX1): not counted for AniList.
+    public var extra: Bool { isExtra ?? false }
+
+    /// "5", "5.5", or "X1" for extras (so "E" + label reads "EX1").
     public var numberLabel: String {
-        number.rounded() == number ? String(Int(number)) : String(number)
+        let n = number.rounded() == number ? String(Int(number)) : String(number)
+        return extra ? "X" + n : n
     }
 
     public var progressFraction: Double? {

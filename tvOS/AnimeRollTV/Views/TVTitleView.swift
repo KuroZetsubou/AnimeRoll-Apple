@@ -17,6 +17,8 @@ struct TVTitleView: View {
     @State private var section = 0
     @State private var loaded = false
     @State private var deleting: EpisodeDTO?
+    @State private var editing: EpisodeDTO?
+    @State private var editNumber = ""
     @State private var deletingSeries = false
     @State private var deleteError: String?
 
@@ -79,6 +81,12 @@ struct TVTitleView: View {
                 .overlay(DS.background.opacity(0.82)).blur(radius: 30).ignoresSafeArea()
         }
         .fullScreenCover(item: $playing, onDismiss: { Task { await load() } }) { TVPlayerView(item: $0) }
+        .alert("Modifica numero", isPresented: Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })) {
+            TextField("Numero", text: $editNumber)
+            Button("Salva") { saveEdit(extra: editing?.extra ?? false) }
+            Button(editing?.extra == true ? "Salva come episodio normale" : "Salva come extra (EX)") { saveEdit(extra: editing?.extra != true) }
+            Button("Annulla", role: .cancel) {}
+        } message: { Text("Gli extra non contano per il progresso su AniList.") }
         .sheet(isPresented: $showSources, onDismiss: { Task { await load() } }) { TVSourcesView(title: media?.title ?? ref.title, aniListId: ref.aniListId, seriesId: series?.id) }
         .confirmationDialog("Eliminare l'episodio dal NAS?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
             Button("Elimina episodio \(deleting?.numberLabel ?? "")", role: .destructive) {
@@ -119,8 +127,16 @@ struct TVTitleView: View {
         }
     }
 
+    private func saveEdit(extra: Bool) {
+        guard let ep = editing, let n = Double(editNumber.replacingOccurrences(of: ",", with: ".")) else { return }
+        Task {
+            do { try await session.api.editEpisode(ep.id, number: n, isExtra: extra); await load() }
+            catch { deleteError = error.localizedDescription }
+        }
+    }
+
     private func episodeBadge(_ ep: EpisodeDTO) -> String? {
-        if ep.completed || Double(entry?.progress ?? 0) >= ep.number { return "Visto" }
+        if ep.completed || (!ep.extra && Double(entry?.progress ?? 0) >= ep.number) { return "Visto" }
         return offline.isDownloaded(ep.id) ? "Offline" : nil
     }
 
@@ -143,6 +159,7 @@ struct TVTitleView: View {
             }
             Button("Ripara sul NAS") { Task { try? await session.api.repairEpisode(ep.id) } }
             if offline.isDownloaded(ep.id) { Button("Rimuovi da Apple TV", role: .destructive) { offline.delete(ep.id) } }
+            Button("Modifica numero…") { editNumber = ep.numberLabel.replacingOccurrences(of: "X", with: ""); editing = ep }
             Button("Elimina dal NAS…", role: .destructive) { deleting = ep }
             if series != nil { Button("Elimina tutta la serie dal NAS…", role: .destructive) { deletingSeries = true } }
         }
@@ -186,7 +203,8 @@ struct TVTitleView: View {
 
     private var nextEpisode: EpisodeDTO? {
         let watched = Double(entry?.progress ?? 0)
-        return episodes.first { ($0.positionSeconds ?? 0) > 5 && !$0.completed } ?? episodes.first { !$0.completed && $0.number > watched } ?? episodes.first
+        let regular = episodes.filter { !$0.extra }
+        return regular.first { ($0.positionSeconds ?? 0) > 5 && !$0.completed } ?? regular.first { !$0.completed && $0.number > watched } ?? episodes.first
     }
 
     private func load() async {

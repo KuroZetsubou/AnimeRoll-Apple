@@ -33,6 +33,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kurozetsubou.animeroll.tv
         GENERATE_INFOPLIST_FILE: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: "App Icon & Top Shelf Image"
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
     info:
       path: AnimeRollTV/Info.plist

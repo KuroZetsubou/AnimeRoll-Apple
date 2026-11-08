@@ -191,6 +191,11 @@ public final class APIClient: @unchecked Sendable {
         let r: Res = try await send("PUT", "api/library/episodes/\(episodeId)/progress", json: Body(positionSeconds: position, durationSeconds: duration))
         return r.completed
     }
+    /// Fixes the number of one episode and/or flags it as extra content (EX1, not counted on AniList).
+    public func editEpisode(_ id: Int, number: Double?, isExtra: Bool?) async throws {
+        struct Body: Encodable { let number: Double?; let isExtra: Bool? }
+        try await sendNoContent("PATCH", "api/library/episodes/\(id)", json: Body(number: number, isExtra: isExtra))
+    }
     /// Deletes the file, subtitles and progress of an episode from the NAS (the series goes with its last episode).
     public func deleteEpisode(_ id: Int) async throws { _ = try await request("DELETE", "api/library/episodes/\(id)") }
     /// Deletes a whole series from the NAS to free space.
