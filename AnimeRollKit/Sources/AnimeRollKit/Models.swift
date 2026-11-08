@@ -74,6 +74,21 @@ public struct SeriesDTO: Codable, Hashable, Identifiable, Sendable {
     public let updatedAt: Date
 }
 
+/// Hand edits of a series: nil leaves a field as it is, "" clears a text field, aniListId 0 unlinks it.
+public struct SeriesEdit: Encodable, Sendable {
+    public var title: String?
+    public var description: String?
+    public var posterUrl: String?
+    public var bannerUrl: String?
+    public var aniListId: Int?
+    public var refreshFromAniList: Bool
+    public init(title: String? = nil, description: String? = nil, posterUrl: String? = nil, bannerUrl: String? = nil,
+                aniListId: Int? = nil, refreshFromAniList: Bool = false) {
+        self.title = title; self.description = description; self.posterUrl = posterUrl; self.bannerUrl = bannerUrl
+        self.aniListId = aniListId; self.refreshFromAniList = refreshFromAniList
+    }
+}
+
 public struct EpisodeDTO: Codable, Hashable, Identifiable, Sendable {
     public let id: Int
     public let seriesId: Int

@@ -191,6 +191,9 @@ public final class APIClient: @unchecked Sendable {
         let r: Res = try await send("PUT", "api/library/episodes/\(episodeId)/progress", json: Body(positionSeconds: position, durationSeconds: duration))
         return r.completed
     }
+    /// Fixes the metadata of a series (title, description, images, AniList link), or re-reads it from AniList.
+    @discardableResult
+    public func editSeries(_ id: Int, _ edit: SeriesEdit) async throws -> SeriesDTO { try await send("PATCH", "api/library/series/\(id)", json: edit) }
     /// Fixes the number of one episode and/or flags it as extra content (EX1, not counted on AniList).
     public func editEpisode(_ id: Int, number: Double?, isExtra: Bool?) async throws {
         struct Body: Encodable { let number: Double?; let isExtra: Bool? }

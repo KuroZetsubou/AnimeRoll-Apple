@@ -20,6 +20,8 @@ struct TVTitleView: View {
     @State private var editing: EpisodeDTO?
     @State private var editNumber = ""
     @State private var deletingSeries = false
+    @State private var relinking = false
+    @State private var relinkText = ""
     @State private var deleteError: String?
 
     var body: some View {
@@ -81,6 +83,14 @@ struct TVTitleView: View {
                 .overlay(DS.background.opacity(0.82)).blur(radius: 30).ignoresSafeArea()
         }
         .fullScreenCover(item: $playing, onDismiss: { Task { await load() } }) { TVPlayerView(item: $0) }
+        .alert("ID AniList", isPresented: $relinking) {
+            TextField("ID AniList", text: $relinkText)
+            Button("Salva e aggiorna") {
+                guard let series, let id = Int(relinkText.trimmingCharacters(in: .whitespaces)), id > 0 else { return }
+                Task { await saveSeries(series, SeriesEdit(aniListId: id, refreshFromAniList: true)) }
+            }
+            Button("Annulla", role: .cancel) {}
+        } message: { Text("Collega la serie alla voce AniList giusta: titolo, immagini ed episodi vengono riletti da lì.") }
         .alert("Modifica numero", isPresented: Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })) {
             TextField("Numero", text: $editNumber)
             Button("Salva") { saveEdit(extra: editing?.extra ?? false) }
@@ -127,6 +137,11 @@ struct TVTitleView: View {
         }
     }
 
+    private func saveSeries(_ series: SeriesDTO, _ edit: SeriesEdit) async {
+        do { self.series = try await session.api.editSeries(series.id, edit); await load() }
+        catch { deleteError = error.localizedDescription }
+    }
+
     private func saveEdit(extra: Bool) {
         guard let ep = editing, let n = Double(editNumber.replacingOccurrences(of: ",", with: ".")) else { return }
         Task {
@@ -161,7 +176,11 @@ struct TVTitleView: View {
             if offline.isDownloaded(ep.id) { Button("Rimuovi da Apple TV", role: .destructive) { offline.delete(ep.id) } }
             Button("Modifica numero…") { editNumber = ep.numberLabel.replacingOccurrences(of: "X", with: ""); editing = ep }
             Button("Elimina dal NAS…", role: .destructive) { deleting = ep }
-            if series != nil { Button("Elimina tutta la serie dal NAS…", role: .destructive) { deletingSeries = true } }
+            if let series {
+                Button("Aggiorna info e immagini da AniList") { Task { await saveSeries(series, SeriesEdit(refreshFromAniList: true)) } }
+                Button("Cambia ID AniList…") { relinkText = series.aniListId.map(String.init) ?? ""; relinking = true }
+                Button("Elimina tutta la serie dal NAS…", role: .destructive) { deletingSeries = true }
+            }
         }
     }
 

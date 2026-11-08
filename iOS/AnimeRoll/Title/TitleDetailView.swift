@@ -100,6 +100,7 @@ struct TitleDetailView: View {
     @State private var deleteError: String?
     @State private var moving: [EpisodeDTO]?
     @State private var editing: EpisodeDTO?
+    @State private var editingSeries = false
 
     init(ref: TitleRef, inlinePlayer: Bool = false) {
         self.ref = ref
@@ -158,6 +159,14 @@ struct TitleDetailView: View {
             Button("OK", role: .cancel) {}
         } message: { Text(deleteError ?? "") }
         .sheet(item: movingItem) { batch in moveSheet(batch) }
+        .sheet(isPresented: $editingSeries) {
+            if let series = model.series {
+                EditSeriesSheet(series: series) { relinked in
+                    editingSeries = false
+                    if relinked { sheet?.close() } else { Task { await model.load(session.api) } }
+                }
+            }
+        }
         .sheet(item: $editing) { ep in
             EditEpisodeSheet(episode: ep) { editing = nil; Task { await model.load(session.api) } }
                 .presentationDetents([.medium])
@@ -350,6 +359,7 @@ struct TitleDetailView: View {
                         Button("Ripara tutta la serie sul NAS", systemImage: "wrench.and.screwdriver") {
                             Task { try? await session.api.repairSeries(series.id) }
                         }
+                        Button("Modifica info e immagini…", systemImage: "pencil") { editingSeries = true }
                         Button("Sposta la serie in un'altra…", systemImage: "arrow.right.circle") { moving = model.episodes }
                         Button("Elimina la serie dal NAS…", systemImage: "trash", role: .destructive) { deletingSeries = true }
                     } label: { Label("Altro", systemImage: "ellipsis") }
@@ -598,6 +608,77 @@ struct EditEpisodeSheet: View {
         Task {
             do { try await session.api.editEpisode(episode.id, number: n, isExtra: isExtra); done() }
             catch { self.error = error.localizedDescription }
+            busy = false
+        }
+    }
+}
+
+/// "Modifica info": fixes title, description, poster, banner and the AniList link of a series; "Aggiorna da AniList" re-reads them.
+struct EditSeriesSheet: View {
+    let series: SeriesDTO
+    let done: (Bool) -> Void
+
+    @Environment(AppSession.self) private var session
+    @State private var title: String
+    @State private var desc: String
+    @State private var poster: String
+    @State private var banner: String
+    @State private var aniListId: String
+    @State private var busy = false
+    @State private var error: String?
+
+    init(series: SeriesDTO, done: @escaping (Bool) -> Void) {
+        self.series = series; self.done = done
+        _title = State(initialValue: series.title)
+        _desc = State(initialValue: series.description ?? "")
+        _poster = State(initialValue: series.posterUrl ?? "")
+        _banner = State(initialValue: series.bannerUrl ?? "")
+        _aniListId = State(initialValue: series.aniListId.map(String.init) ?? "")
+    }
+
+    private var newId: Int? { aniListId.trimmingCharacters(in: .whitespaces).isEmpty ? 0 : Int(aniListId) }
+
+    private func field(_ label: String, _ text: Binding<String>, lines: Int = 1) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(DS.body(12, 600)).foregroundStyle(DS.textTertiary)
+            TextField(label, text: text, axis: .vertical).lineLimit(1...lines).font(DS.body(15))
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+                .padding(12).background(DS.surface, in: .rect(cornerRadius: DS.rCard))
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Modifica info").font(DS.display(22, 800)).padding(.top, 24)
+                field("Titolo", $title)
+                field("ID AniList (vuoto = nessun collegamento)", $aniListId)
+                field("Indirizzo del poster", $poster, lines: 3)
+                field("Indirizzo del banner", $banner, lines: 3)
+                field("Descrizione", $desc, lines: 8)
+                if let error { Text(error).font(DS.body(13)).foregroundStyle(.red) }
+                Button { save(refresh: false) } label: { Text("Salva").frame(maxWidth: .infinity) }
+                    .buttonStyle(PrimaryButtonStyle()).disabled(busy || newId == nil || title.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button { save(refresh: true) } label: { Label("Salva e aggiorna da AniList", systemImage: "arrow.clockwise").frame(maxWidth: .infinity) }
+                    .buttonStyle(PrimaryButtonStyle(prominent: false)).disabled(busy || (newId ?? 0) == 0)
+                Text("“Aggiorna da AniList” sostituisce titolo, descrizione, immagini, episodi, generi e anno con quelli di AniList.")
+                    .font(DS.body(12)).foregroundStyle(DS.textTertiary)
+            }
+            .padding(.horizontal, 20).padding(.bottom, 30)
+        }
+        .background(DS.background.ignoresSafeArea())
+    }
+
+    private func save(refresh: Bool) {
+        guard let id = newId else { return }
+        busy = true; error = nil
+        Task {
+            do {
+                var e = SeriesEdit(title: title, description: desc, posterUrl: poster, bannerUrl: banner, refreshFromAniList: refresh)
+                if id != (series.aniListId ?? 0) { e.aniListId = id }
+                try await session.api.editSeries(series.id, e)
+                done(id != (series.aniListId ?? 0))
+            } catch { self.error = error.localizedDescription }
             busy = false
         }
     }
