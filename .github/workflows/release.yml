@@ -1,0 +1,82 @@
+# Push to main  -> "nightly" pre-release with unsigned iOS and tvOS .ipa files
+# Tag vX.Y.Z    -> release "vX.Y.Z" with the same files (a tag like v1.2.0-beta.1 is a pre-release)
+#
+# The .ipa files are not signed: install them with a sideloading tool (AltStore, Sideloadly, ...)
+# that signs them with your own Apple account, or build from source with Xcode.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Newest Xcode
+        run: |
+          xc=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$xc"
+          xcodebuild -version
+          brew install xcodegen
+
+      - name: Version
+        id: v
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            v="${GITHUB_REF_NAME#v}"
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"; echo "version=$v" >> "$GITHUB_OUTPUT"
+            echo "marketing=${v%%-*}" >> "$GITHUB_OUTPUT"   # App Store style: digits and dots only
+          else
+            echo "tag=nightly" >> "$GITHUB_OUTPUT"; echo "version=nightly-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+            echo "marketing=" >> "$GITHUB_OUTPUT"            # keep the project's version
+          fi
+
+      - name: Build
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          MARKETING: ${{ steps.v.outputs.marketing }}
+        run: |
+          set -eo pipefail
+          extra=(CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER")
+          [[ -n "$MARKETING" ]] && extra+=(MARKETING_VERSION="$MARKETING")
+          build() { # folder, scheme, platform, products folder, output name
+            (cd "$1" && xcodegen generate -q)
+            xcodebuild -project "$1/$2.xcodeproj" -scheme "$2" -configuration Release \
+              -destination "generic/platform=$3" -derivedDataPath build \
+              CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" "${extra[@]}" build | tail -20
+            rm -rf Payload && mkdir Payload
+            cp -R "build/Build/Products/Release-$4/$2.app" Payload/
+            zip -qry "$5" Payload && rm -rf Payload
+          }
+          build iOS AnimeRoll iOS iphoneos "AnimeRoll-iOS-$VERSION-unsigned.ipa"
+          build tvOS AnimeRollTV tvOS appletvos "AnimeRoll-tvOS-$VERSION-unsigned.ipa"
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          files=(AnimeRoll-*.ipa)
+          note="Unsigned builds: install them with a sideloading tool that signs with your Apple account, or build from source with Xcode."
+          if [[ "$TAG" == nightly ]]; then
+            gh release delete nightly --yes --cleanup-tag 2>/dev/null || true
+            gh release create nightly "${files[@]}" --target "$GITHUB_SHA" --prerelease --title "Nightly" \
+              --notes "Automatic build of \`main\` at ${GITHUB_SHA::7}. Not a stable release. $note"
+          else
+            pre=(); [[ "$VERSION" == *-* ]] && pre=(--prerelease)
+            gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --verify-tag --generate-notes --notes "$note" --title "AnimeRoll Apple $TAG" "${pre[@]}"
+            gh release upload "$TAG" "${files[@]}" --clobber
+          fi
