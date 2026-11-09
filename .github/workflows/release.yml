@@ -20,13 +20,15 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-26
+    # Xcode 27 image (iOS/tvOS 27 SDK): the app uses iOS 27 APIs, so the macos-26 image (Xcode 26) cannot build it.
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v5
 
       - name: Newest Xcode
         run: |
-          xc=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          # newest stable Xcode (skips the *_beta_* copies)
+          xc=$(ls -d /Applications/Xcode_[0-9]*.app | grep -E '/Xcode_[0-9.]+\.app$' | sort -V | tail -1)
           sudo xcode-select -s "$xc"
           xcodebuild -version
           brew install xcodegen
