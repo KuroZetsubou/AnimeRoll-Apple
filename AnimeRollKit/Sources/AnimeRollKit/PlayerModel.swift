@@ -3,7 +3,7 @@ import Foundation
 import Observation
 import os
 
-/// What to play: a NAS episode (with progress + AniList sync) or a direct source stream.
+/// What to play: a server episode (with progress + AniList sync) or a direct source stream.
 /// An empty `playlist` means "load it in the background after playback starts".
 public enum PlaybackItem: Hashable, Identifiable, Sendable {
     case episode(EpisodeDTO, series: SeriesDTO, playlist: [EpisodeDTO])
@@ -17,7 +17,7 @@ public enum PlaybackItem: Hashable, Identifiable, Sendable {
     }
 }
 
-/// Owns the AVPlayer, resumes from the saved position, reports progress to the NAS
+/// Owns the AVPlayer, resumes from the saved position, reports progress to the server
 /// every 15 seconds (the server marks the episode watched at 85% and updates AniList),
 /// and offers "next episode" like Netflix.
 ///
@@ -87,7 +87,9 @@ public final class PlayerModel {
 
     /// Configure once at app launch, never on the way to playback: it blocks the main thread.
     public nonisolated static func configureAudioSession() {
+        #if !os(macOS)
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+        #endif
     }
 
     public func load(_ item: PlaybackItem) async {
@@ -113,7 +115,7 @@ public final class PlayerModel {
         cancelAutoNext()
         setShowNextUp(false)
         title = series?.title ?? ""
-        subtitle = "Episodio \(ep.numberLabel)" + (ep.title.map { $0.hasPrefix("Episodio") ? "" : " · \($0)" } ?? "")
+        subtitle = "Episode \(ep.numberLabel)" + (ep.title.map { $0.hasPrefix("Episode") ? "" : " · \($0)" } ?? "")
         nextEpisode = playlistEpisodes.first { $0.number > ep.number }
 
         var resume = ep.completed ? nil : ep.positionSeconds
@@ -123,7 +125,7 @@ public final class PlayerModel {
             let local = OfflineDownloads.shared.localSubtitles(for: ep.id)
             subtitles.setTracks(local, seriesId: series?.id)
             if local.isEmpty {
-                // Downloaded before subtitles were kept: fetch them in the background if the NAS answers.
+                // Downloaded before subtitles were kept: fetch them in the background if the server answers.
                 let seriesId = series?.id
                 Task { [weak self] in
                     guard let self else { return }
@@ -234,7 +236,7 @@ public final class PlayerModel {
                         await Self.disableEmbeddedSubtitles(item)
                         await self.loadAudio(item)
                     case .failed:
-                        self.error = item.error?.localizedDescription ?? "Impossibile riprodurre il video."
+                        self.error = item.error?.localizedDescription ?? String(localized: "Cannot play the video.", bundle: .module)
                         self.isLoading = false
                     default: break
                     }
@@ -372,7 +374,7 @@ public final class PlayerModel {
     private func tick() {
         guard let item = player.currentItem, item.duration.isNumeric else { return }
         let pos = player.currentTime().seconds, dur = item.duration.seconds
-        // "Prossimo episodio" in the last 90 seconds (ending credits)
+        // "Next episode" in the last 90 seconds (ending credits)
         setShowNextUp(nextEpisode != nil && dur - pos < 90 && dur > 300)
         if Date().timeIntervalSince(lastReport) > 15 { Task { await report(force: false) } }
     }

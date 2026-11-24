@@ -1,0 +1,16 @@
+{
+  "sourceLanguage": "en",
+  "version": "1.0",
+  "strings": {
+    "NSLocalNetworkUsageDescription": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AnimeRoll si collega al tuo server sulla rete locale."
+          }
+        }
+      }
+    }
+  }
+}

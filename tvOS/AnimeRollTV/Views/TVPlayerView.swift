@@ -17,13 +17,13 @@ struct TVPlayerView: View {
                 SubtitleOverlay(controller: model.subtitles, videoSize: model.videoSize).ignoresSafeArea()
                 if let left = model.autoNextIn, let next = model.nextEpisode {
                     HStack(spacing: 24) {
-                        Text("Episodio \(next.numberLabel) tra \(left) s")
-                        Button("Annulla") { model.cancelAutoNext() }
-                        Button("Avvia") { Task { await model.playNext() } }
+                        Text("Episode \(next.numberLabel) in \(left) s")
+                        Button("Cancel") { model.cancelAutoNext() }
+                        Button("Start") { Task { await model.playNext() } }
                     }
                     .padding(80)
                 } else if model.showNextUp, let next = model.nextEpisode {
-                    Button("Episodio \(next.numberLabel) ▸") { Task { await model.playNext() } }
+                    Button("Episode \(next.numberLabel) ▸") { Task { await model.playNext() } }
                         .padding(80)
                 }
             }
@@ -42,7 +42,7 @@ struct TVPlayerView: View {
     }
 }
 
-/// AVPlayerViewController with a "Sottotitoli" menu in the native transport bar
+/// AVPlayerViewController with a "Subtitles" menu in the native transport bar
 /// (tracks, off, sync nudge), reachable with the Siri Remote like Apple's own menus.
 struct TVSystemPlayer: UIViewControllerRepresentable {
     let player: AVPlayer
@@ -66,20 +66,20 @@ struct TVSystemPlayer: UIViewControllerRepresentable {
 
     private func subtitleMenu() -> UIMenu {
         let c = subtitles
-        let off = UIAction(title: "Disattivati", state: c.selected == nil ? .on : .off) { _ in c.select(nil) }
+        let off = UIAction(title: "Off", state: c.selected == nil ? .on : .off) { _ in c.select(nil) }
         let tracks = c.tracks.map { track in
             UIAction(title: track.label, state: c.selected == track ? .on : .off) { _ in c.select(track) }
         }
         var children: [UIMenuElement] = [UIMenu(options: .displayInline, children: [off] + tracks)]
         if c.selected != nil {
             let current = c.offset == 0 ? "originale" : String(format: "%+.2f s", c.offset)
-            children.append(UIMenu(title: "Sincronia: \(current)", options: .displayInline, children: [
-                UIAction(title: "Anticipa di 0,25 s", image: UIImage(systemName: "backward")) { _ in c.nudge(by: -SubtitleController.offsetStep) },
-                UIAction(title: "Ritarda di 0,25 s", image: UIImage(systemName: "forward")) { _ in c.nudge(by: SubtitleController.offsetStep) },
-                UIAction(title: "Ripristina", image: UIImage(systemName: "arrow.uturn.backward"),
+            children.append(UIMenu(title: "Sync: \(current)", options: .displayInline, children: [
+                UIAction(title: "Earlier by 0.25 s", image: UIImage(systemName: "backward")) { _ in c.nudge(by: -SubtitleController.offsetStep) },
+                UIAction(title: "Later by 0.25 s", image: UIImage(systemName: "forward")) { _ in c.nudge(by: SubtitleController.offsetStep) },
+                UIAction(title: "Reset", image: UIImage(systemName: "arrow.uturn.backward"),
                          attributes: c.offset == 0 ? .disabled : []) { _ in c.resetOffset() },
             ]))
         }
-        return UIMenu(title: "Sottotitoli", image: UIImage(systemName: "captions.bubble"), children: children)
+        return UIMenu(title: "Subtitles", image: UIImage(systemName: "captions.bubble"), children: children)
     }
 }

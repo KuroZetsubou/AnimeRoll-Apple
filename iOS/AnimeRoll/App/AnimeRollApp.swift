@@ -50,7 +50,7 @@ struct RootView: View {
             if session.isRestoring {
                 LaunchLoadingView()
             } else if session.isLoggedIn {
-                MainView()
+                if session.showProfilePicker { ProfilePickerView() } else { MainView() }
             } else {
                 LoginView()
             }
@@ -58,6 +58,7 @@ struct RootView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.background)
         .trackingFoldPosture()
+        .task(id: session.user?.id) { await session.checkProfilePicker() }
     }
 }
 
@@ -89,10 +90,10 @@ struct MainView: View {
                     .toolbarVisibility(tabBarHidden ? .hidden : .visible, for: .tabBar)
                 }
             }
-            Tab("Esplora", systemImage: "safari", value: .explore) { NavigationStack { ExploreView() } }
-            Tab("Libreria", systemImage: "books.vertical.fill", value: .library) { NavigationStack { LibraryView() } }
-            Tab("Download", systemImage: "arrow.down.to.line", value: .downloads) { NavigationStack { DownloadsView() } }
-            Tab("Profilo", systemImage: "person.fill", value: .profile) { NavigationStack { SettingsView() } }
+            Tab("Explore", systemImage: "safari", value: .explore) { NavigationStack { ExploreView() } }
+            Tab("Library", systemImage: "books.vertical.fill", value: .library) { NavigationStack { LibraryView() } }
+            Tab("Downloads", systemImage: "arrow.down.to.line", value: .downloads) { NavigationStack { DownloadsView() } }
+            Tab("Profile", systemImage: "person.fill", value: .profile) { NavigationStack { SettingsView() } }
         }
         .tabViewStyle(.sidebarAdaptable)
         .onChange(of: tab) { _, _ in Haptics.tick(); tabBarHidden = false }
@@ -110,7 +111,7 @@ struct OfflineErrorAlert: ViewModifier {
     @Environment(OfflineDownloads.self) private var offline
 
     func body(content: Content) -> some View {
-        content.alert("Download non riuscito", isPresented: Binding(
+        content.alert("Download failed", isPresented: Binding(
             get: { offline.lastError != nil },
             set: { if !$0 { offline.lastError = nil } })) {
             Button("OK", role: .cancel) {}

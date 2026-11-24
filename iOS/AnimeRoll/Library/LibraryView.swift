@@ -1,7 +1,7 @@
 import AnimeRollKit
 import SwiftUI
 
-/// Libreria: series on the NAS, a filter field and Importa (scans /media/_inbox).
+/// Libreria: series on the server, a filter field and Importa (scans /media/_inbox).
 struct LibraryView: View {
     @Environment(AppSession.self) private var session
     @Environment(\.openTitle) private var openTitle
@@ -20,18 +20,18 @@ struct LibraryView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
-                    ScreenTitle("Libreria")
+                    ScreenTitle("Library")
                     Spacer()
-                    Button { Task { await importInbox() } } label: { Label("Importa", systemImage: "tray.and.arrow.down") }
+                    Button { Task { await importInbox() } } label: { Label("Import", systemImage: "tray.and.arrow.down") }
                         .buttonStyle(PrimaryButtonStyle(prominent: false, small: true))
                 }
-                SearchPill(text: $filter, placeholder: "Filtra la libreria")
+                SearchPill(text: $filter, placeholder: "Filter the library")
                 if let info { Text(info).font(DS.body(13)).foregroundStyle(DS.accent) }
                 if loaded && shown.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "folder").font(.system(size: 36))
-                        Text(filter.isEmpty ? "Scarica qualcosa sul NAS o metti i file in /media/_inbox e premi Importa"
-                                            : "Nessuna serie per “\(filter)”")
+                        Text(filter.isEmpty ? "Download something to your server or put files in /media/_inbox and press Import"
+                                            : "No series for “\(filter)”")
                             .font(DS.body(15)).multilineTextAlignment(.center)
                     }
                     .foregroundStyle(DS.textTertiary).frame(maxWidth: .infinity).padding(.vertical, 48)
@@ -58,7 +58,7 @@ struct LibraryView: View {
 
     private func importInbox() async {
         Haptics.tick()
-        do { let n = try await session.api.scanInbox(); info = "Importati \(n) episodi da _inbox"; await load() }
+        do { let n = try await session.api.scanInbox(); info = String(localized: "Imported \(n) episodes from _inbox"); await load() }
         catch { info = error.localizedDescription }
     }
 
@@ -77,7 +77,7 @@ struct SearchPill: View {
             field.font(DS.body(16)).autocorrectionDisabled().textInputAutocapitalization(.never).submitLabel(.search)
             if !text.isEmpty {
                 Button { text = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(DS.textTertiary) }
-                    .accessibilityLabel("Cancella")
+                    .accessibilityLabel("Clear")
             }
         }
         .padding(.horizontal, 16).frame(height: 48)
@@ -89,7 +89,7 @@ struct SearchPill: View {
     }
 }
 
-/// Cerca: recent searches while empty, then a poster grid mixing the NAS (first) and AniList, as you type.
+/// Cerca: recent searches while empty, then a poster grid mixing the server (first) and AniList, as you type.
 struct SearchView: View {
     @Environment(AppSession.self) private var session
     @Environment(\.openTitle) private var openTitle
@@ -115,12 +115,12 @@ struct SearchView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 12) {
-                    SearchPill(text: $query, placeholder: "Cerca titoli", focused: $focused)
-                    Button("Annulla") { dismiss() }.font(DS.body(15, 600)).tint(DS.accent)
+                    SearchPill(text: $query, placeholder: "Search titles", focused: $focused)
+                    Button("Cancel") { dismiss() }.font(DS.body(15, 600)).tint(DS.accent)
                 }
                 if query.count < 2 {
                     if !recents.isEmpty {
-                        Text("Recenti").font(DS.display(17, 700)).padding(.top, 10)
+                        Text("Recent").font(DS.display(17, 700)).padding(.top, 10)
                         ForEach(recents, id: \.self) { r in
                             Button { query = r } label: {
                                 HStack(spacing: 12) { Image(systemName: "clock"); Text(r); Spacer() }
@@ -129,12 +129,12 @@ struct SearchView: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    Text("I risultati mescolano la libreria NAS e AniList.").font(DS.body(13)).foregroundStyle(DS.textTertiary).padding(.top, 8)
+                    Text("Results mix your server library and AniList.").font(DS.body(13)).foregroundStyle(DS.textTertiary).padding(.top, 8)
                 } else {
                     LazyVGrid(columns: grid, alignment: .leading, spacing: 18) {
                         ForEach(nas) { s in
                             Button { open(.series(s)) } label: {
-                                PosterCard(title: s.title, url: s.posterUrl.flatMap(URL.init(string:)), badge: "NAS", meta: s.year.map(String.init), width: 100)
+                                PosterCard(title: s.title, url: s.posterUrl.flatMap(URL.init(string:)), badge: "server", meta: s.year.map(String.init), width: 100)
                             }
                             .buttonStyle(.plain)
                         }
@@ -147,7 +147,7 @@ struct SearchView: View {
                     }
                     .padding(.top, 6)
                     if searched && nas.isEmpty && results.isEmpty {
-                        Text("Nessun risultato per “\(query)”").font(DS.body(15)).foregroundStyle(DS.textTertiary)
+                        Text("No results for “\(query)”").font(DS.body(15)).foregroundStyle(DS.textTertiary)
                             .frame(maxWidth: .infinity).padding(.top, 32)
                     }
                 }

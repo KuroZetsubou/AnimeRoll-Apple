@@ -38,7 +38,7 @@ struct PrimaryButtonStyle: ButtonStyle {
 
 /// Rounded chip: accent when selected, outline otherwise.
 struct Chip: View {
-    let title: String
+    let title: LocalizedStringKey
     var selected = false
     var trailingIcon: String? = nil
     let action: () -> Void
@@ -59,26 +59,26 @@ struct Chip: View {
     }
 }
 
-/// Uppercase badge (NAS, 12 ep).
+/// Uppercase badge (server, 12 ep).
 struct BadgeLabel: View {
-    let text: String
+    let text: LocalizedStringKey
     var tint: Color = DS.accent
     var body: some View {
-        Text(text.uppercased()).font(DS.display(11, 700)).tracking(0.9).foregroundStyle(DS.onAccent)
+        Text(text).textCase(.uppercase).font(DS.display(11, 700)).tracking(0.9).foregroundStyle(DS.onAccent)
             .padding(.horizontal, 8).frame(height: 20).background(tint, in: .rect(cornerRadius: DS.rBadge))
     }
 }
 
 /// Screen title (Outfit 32 extra bold).
 struct ScreenTitle: View {
-    let text: String
-    init(_ t: String) { text = t }
+    let text: LocalizedStringKey
+    init(_ t: LocalizedStringKey) { text = t }
     var body: some View { Text(text).font(DS.display(32, 800)).foregroundStyle(.white) }
 }
 
 /// Pill segmented control.
 struct PillSegmented: View {
-    let options: [String]
+    let options: [LocalizedStringKey]
     @Binding var selection: Int
     var body: some View {
         HStack(spacing: 0) {
@@ -97,7 +97,7 @@ struct PillSegmented: View {
 
 /// Icon over a small label (detail page action row).
 struct IconAction: View {
-    let title: String
+    let title: LocalizedStringKey
     let systemImage: String
     let action: () -> Void
 
@@ -143,7 +143,7 @@ struct PosterCard: View {
                 .frame(width: width, height: width * 1.5)
                 .clipShape(.rect(cornerRadius: DS.rPoster))
                 .shadow(color: .black.opacity(0.45), radius: 9, y: 4)
-                .overlay(alignment: .topLeading) { if let badge { BadgeLabel(text: badge).padding(8) } }
+                .overlay(alignment: .topLeading) { if let badge { BadgeLabel(text: LocalizedStringKey(badge)).padding(8) } }
             Text(title).font(DS.body(13, 600)).lineLimit(2).frame(width: width, alignment: .leading).padding(.top, 8)
             if let meta { Text(meta).font(DS.body(12)).foregroundStyle(DS.textTertiary).lineLimit(1).frame(width: width, alignment: .leading).padding(.top, 2) }
         }
@@ -152,7 +152,7 @@ struct PosterCard: View {
 
 /// Horizontal row with a title, like Netflix shelves.
 struct Shelf<Item: Hashable, Content: View>: View {
-    let title: String
+    let title: LocalizedStringKey
     let items: [Item]
     @ViewBuilder let content: (Item) -> Content
 
@@ -188,7 +188,7 @@ struct RankedPoster: View {
             RemoteImage(url: url).frame(width: 112, height: 168).clipShape(.rect(cornerRadius: DS.rPoster))
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Numero \(rank)")
+        .accessibilityLabel("Number \(rank)")
     }
 }
 

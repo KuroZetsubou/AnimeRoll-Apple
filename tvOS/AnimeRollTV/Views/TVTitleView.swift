@@ -10,6 +10,7 @@ struct TVTitleView: View {
     @State private var series: SeriesDTO?
     @State private var episodes: [EpisodeDTO] = []
     @State private var entry: AniListEntry?
+    @State private var showListSheet = false
     @State private var similar: [TitleRef]?
     @State private var related: [(relation: String, ref: TitleRef)] = []
     @State private var playing: PlaybackItem?
@@ -36,33 +37,27 @@ struct TVTitleView: View {
                         if let r = media?.titleRomaji, r != (media?.title ?? "") { Text(r).font(DS.body(24)).foregroundStyle(DS.textTertiary) }
                         HStack(spacing: 14) {
                             Text(meta).font(DS.body(26)).foregroundStyle(DS.textSecondary)
-                            if !episodes.isEmpty { TVBadge(text: "Sul NAS") }
+                            if !episodes.isEmpty { TVBadge(text: "On server") }
                         }
                         if let t = media?.nextAiringText {
                             Label(t, systemImage: "calendar").font(DS.body(26)).foregroundStyle(DS.teal)
                         }
                         if let e = entry {
-                            Label("AniList: guardati \(e.progress)/\(media?.episodes.map(String.init) ?? "?") · \(AniListStatusLabel.text(e.status))", systemImage: "link")
+                            Label(String(localized: "Watched \(e.progress)/\(media?.episodes.map(String.init) ?? "?") · \(AniListStatusLabel.text(e.status))") + (e.score.flatMap { $0 > 0 ? " · ★ \(Int($0.rounded()))" : nil } ?? ""), systemImage: "link")
                                 .font(DS.body(26)).foregroundStyle(DS.teal)
                         }
                         Text(media?.plainDescription ?? series?.description ?? "").font(DS.body(26)).foregroundStyle(DS.textSecondary).lineLimit(4)
                         HStack(spacing: 24) {
                             if let next = nextEpisode {
                                 Button { play(next) } label: {
-                                    Label((next.positionSeconds ?? 0) > 5 && !next.completed ? "Riprendi E\(next.numberLabel)" : "Guarda E\(next.numberLabel)", systemImage: "play.fill")
+                                    Label((next.positionSeconds ?? 0) > 5 && !next.completed ? "Resume E\(next.numberLabel)" : "Watch E\(next.numberLabel)", systemImage: "play.fill")
                                 }
                             } else if loaded {
-                                Text("Non ancora sul NAS").font(DS.body(26)).foregroundStyle(DS.textSecondary)
+                                Text("Not on the server yet").font(DS.body(26)).foregroundStyle(DS.textSecondary)
                             }
-                            Button { showSources = true } label: { Label("Trova episodi", systemImage: "magnifyingglass") }
-                            if let id = ref.aniListId, session.user?.aniListConnected == true {
-                                Menu {
-                                    ForEach(["CURRENT", "PLANNING", "COMPLETED", "PAUSED", "DROPPED"], id: \.self) { s in
-                                        Button(AniListStatusLabel.text(s)) {
-                                            Task { try? await session.api.aniListSetStatus(id, status: s); entry = (try? await session.api.aniListEntry(id)) ?? nil }
-                                        }
-                                    }
-                                } label: { Label(entry == nil ? "Lista" : "✓ Lista", systemImage: entry == nil ? "plus" : "checkmark") }
+                            Button { showSources = true } label: { Label("Find episodes", systemImage: "magnifyingglass") }
+                            if ref.aniListId != nil, session.user?.hasTracker == true {
+                                Button { showListSheet = true } label: { Label(entry == nil ? "List" : "✓ List", systemImage: entry == nil ? "plus" : "checkmark") }
                             }
                         }
                         .padding(.top, 6)
@@ -71,7 +66,7 @@ struct TVTitleView: View {
                 .padding(.horizontal, 80)
                 .focusSection()
 
-                Picker("", selection: $section) { Text("Episodi").tag(0); Text("Simili").tag(1) }
+                Picker("", selection: $section) { Text("Episodes").tag(0); Text("Similar").tag(1) }
                     .pickerStyle(.segmented).frame(maxWidth: 600).padding(.horizontal, 80)
 
                 if section == 0 { episodesRow } else { similarRow }
@@ -85,30 +80,38 @@ struct TVTitleView: View {
         .fullScreenCover(item: $playing, onDismiss: { Task { await load() } }) { TVPlayerView(item: $0) }
         .alert("ID AniList", isPresented: $relinking) {
             TextField("ID AniList", text: $relinkText)
-            Button("Salva e aggiorna") {
+            Button("Save and refresh") {
                 guard let series, let id = Int(relinkText.trimmingCharacters(in: .whitespaces)), id > 0 else { return }
                 Task { await saveSeries(series, SeriesEdit(aniListId: id, refreshFromAniList: true)) }
             }
-            Button("Annulla", role: .cancel) {}
-        } message: { Text("Collega la serie alla voce AniList giusta: titolo, immagini ed episodi vengono riletti da lì.") }
-        .alert("Modifica numero", isPresented: Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })) {
-            TextField("Numero", text: $editNumber)
-            Button("Salva") { saveEdit(extra: editing?.extra ?? false) }
-            Button(editing?.extra == true ? "Salva come episodio normale" : "Salva come extra (EX)") { saveEdit(extra: editing?.extra != true) }
-            Button("Annulla", role: .cancel) {}
-        } message: { Text("Gli extra non contano per il progresso su AniList.") }
+            Button("Cancel", role: .cancel) {}
+        } message: { Text("Link the series to the right AniList entry: title, images and episodes are re-read from there.") }
+        .alert("Edit number", isPresented: Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })) {
+            TextField("Number", text: $editNumber)
+            Button("Save") { saveEdit(extra: editing?.extra ?? false) }
+            Button(editing?.extra == true ? "Save as regular episode" : "Save as extra (EX)") { saveEdit(extra: editing?.extra != true) }
+            Button("Cancel", role: .cancel) {}
+        } message: { Text("Extras are not counted in AniList progress.") }
+        .sheet(isPresented: $showListSheet) {
+            TVListStatusSheet(entry: entry, total: media?.episodes) { update in
+                guard let id = ref.aniListId else { return entry }
+                try await session.api.saveTrackerEntry(id, update)
+                entry = (try? await session.api.trackerEntry(id)) ?? nil
+                return entry
+            }
+        }
         .sheet(isPresented: $showSources, onDismiss: { Task { await load() } }) { TVSourcesView(title: media?.title ?? ref.title, aniListId: ref.aniListId, seriesId: series?.id) }
-        .confirmationDialog("Eliminare l'episodio dal NAS?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
-            Button("Elimina episodio \(deleting?.numberLabel ?? "")", role: .destructive) {
+        .confirmationDialog("Delete the episode from the server?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
+            Button("Delete episode \(deleting?.numberLabel ?? "")", role: .destructive) {
                 guard let ep = deleting else { return }
                 Task {
                     do { try await session.api.deleteEpisode(ep.id); episodes.removeAll { $0.id == ep.id }; if episodes.isEmpty { series = nil } }
                     catch { deleteError = error.localizedDescription }
                 }
             }
-        } message: { Text("Il file e i sottotitoli vengono cancellati dal NAS e liberano spazio.") }
-        .confirmationDialog("Eliminare tutta la serie dal NAS?", isPresented: $deletingSeries, titleVisibility: .visible) {
-            Button("Elimina la serie e tutti gli episodi", role: .destructive) {
+        } message: { Text("The file and subtitles are deleted from the server, freeing space.") }
+        .confirmationDialog("Delete the whole series from the server?", isPresented: $deletingSeries, titleVisibility: .visible) {
+            Button("Delete the series and all its episodes", role: .destructive) {
                 guard let s = series else { return }
                 Task {
                     do { try await session.api.deleteSeries(s.id); episodes = []; series = nil }
@@ -116,7 +119,7 @@ struct TVTitleView: View {
                 }
             }
         }
-        .alert("Eliminazione non riuscita", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
+        .alert("Delete failed", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
             Button("OK", role: .cancel) {}
         } message: { Text(deleteError ?? "") }
         .task { await load() }
@@ -125,7 +128,7 @@ struct TVTitleView: View {
 
     @ViewBuilder private var episodesRow: some View {
         if episodes.isEmpty {
-            Text(loaded ? "Nessun episodio sul NAS" : "").font(DS.body(26)).foregroundStyle(DS.textTertiary).padding(.horizontal, 80)
+            Text(loaded ? "No episodes on the server" : "").font(DS.body(26)).foregroundStyle(DS.textTertiary).padding(.horizontal, 80)
         } else {
             ScrollView(.horizontal) {
                 LazyHStack(spacing: 40) {
@@ -151,8 +154,8 @@ struct TVTitleView: View {
     }
 
     private func episodeBadge(_ ep: EpisodeDTO) -> String? {
-        if ep.completed || (!ep.extra && Double(entry?.progress ?? 0) >= ep.number) { return "Visto" }
-        return offline.isDownloaded(ep.id) ? "Offline" : nil
+        if ep.completed || (!ep.extra && Double(entry?.progress ?? 0) >= ep.number) { return "Watched" }
+        return offline.isDownloaded(ep.id) ? String(localized: "Offline") : nil
     }
 
     private func episodeMeta(_ ep: EpisodeDTO) -> String {
@@ -164,41 +167,41 @@ struct TVTitleView: View {
     private func episodeCard(_ ep: EpisodeDTO) -> some View {
         let image: URL? = (series?.bannerUrl ?? series?.posterUrl).flatMap { URL(string: $0) }
         return Button { play(ep) } label: {
-            TVPoster(title: ep.title ?? "Episodio \(ep.numberLabel)", url: image, badge: episodeBadge(ep),
+            TVPoster(title: ep.title ?? "Episode \(ep.numberLabel)", url: image, badge: episodeBadge(ep),
                      meta: episodeMeta(ep), progress: ep.progressFraction, wide: true)
         }
         .buttonStyle(.borderless)
         .contextMenu {
             if let series, !offline.isDownloaded(ep.id) {
-                Button("Scarica su Apple TV") { Task { await offline.download(ep, of: series, api: session.api) } }
+                Button("Download to Apple TV") { Task { await offline.download(ep, of: series, api: session.api) } }
             }
-            Button("Ripara sul NAS") { Task { try? await session.api.repairEpisode(ep.id) } }
-            if offline.isDownloaded(ep.id) { Button("Rimuovi da Apple TV", role: .destructive) { offline.delete(ep.id) } }
-            Button("Modifica numero…") { editNumber = ep.numberLabel.replacingOccurrences(of: "X", with: ""); editing = ep }
-            Button("Elimina dal NAS…", role: .destructive) { deleting = ep }
+            Button("Repair on server") { Task { try? await session.api.repairEpisode(ep.id) } }
+            if offline.isDownloaded(ep.id) { Button("Remove from Apple TV", role: .destructive) { offline.delete(ep.id) } }
+            Button("Edit number…") { editNumber = ep.numberLabel.replacingOccurrences(of: "X", with: ""); editing = ep }
+            Button("Delete from server…", role: .destructive) { deleting = ep }
             if let series {
-                Button("Aggiorna info e immagini da AniList") { Task { await saveSeries(series, SeriesEdit(refreshFromAniList: true)) } }
-                Button("Cambia ID AniList…") { relinkText = series.aniListId.map(String.init) ?? ""; relinking = true }
-                Button("Elimina tutta la serie dal NAS…", role: .destructive) { deletingSeries = true }
+                Button("Refresh info and images from AniList") { Task { await saveSeries(series, SeriesEdit(refreshFromAniList: true)) } }
+                Button("Change AniList ID…") { relinkText = series.aniListId.map(String.init) ?? ""; relinking = true }
+                Button("Delete the whole series from the server…", role: .destructive) { deletingSeries = true }
             }
         }
     }
 
     @ViewBuilder private var similarRow: some View {
         if similar == nil { ProgressView().frame(maxWidth: .infinity) }
-        else if similar?.isEmpty == true && related.isEmpty { Text("Nessun titolo simile").font(DS.body(26)).foregroundStyle(DS.textTertiary).padding(.horizontal, 80) }
+        else if similar?.isEmpty == true && related.isEmpty { Text("No similar titles").font(DS.body(26)).foregroundStyle(DS.textTertiary).padding(.horizontal, 80) }
         else {
             // Rows of posters; the page itself scrolls down.
             VStack(alignment: .leading, spacing: 20) {
                 if !related.isEmpty {
-                    Text("Stagioni e correlati").font(DS.display(34, 700)).padding(.horizontal, 80)
+                    Text("Seasons and related").font(DS.display(34, 700)).padding(.horizontal, 80)
                     LazyVGrid(columns: Array(repeating: GridItem(.fixed(260), spacing: 40, alignment: .top), count: 5), alignment: .leading, spacing: 50) {
                         ForEach(Array(related.enumerated()), id: \.offset) { _, item in
                             NavigationLink(value: item.ref) { TVPoster(title: item.ref.title, url: item.ref.posterURL, meta: item.relation) }.buttonStyle(.borderless)
                         }
                     }
                     .padding(.horizontal, 80).padding(.bottom, 30)
-                    Text("Simili").font(DS.display(34, 700)).padding(.horizontal, 80)
+                    Text("Similar").font(DS.display(34, 700)).padding(.horizontal, 80)
                 }
                 LazyVGrid(columns: Array(repeating: GridItem(.fixed(260), spacing: 40, alignment: .top), count: 5), alignment: .leading, spacing: 50) {
                     ForEach(similar ?? [], id: \.self) { r in
@@ -215,7 +218,7 @@ struct TVTitleView: View {
         if let y = media?.year ?? series?.year { parts.append(String(y)) }
         let genres = media?.genres ?? series?.genreList ?? []
         if !genres.isEmpty { parts.append(genres.prefix(3).joined(separator: " · ")) }
-        if let n = media?.episodes ?? series?.totalEpisodes { parts.append("\(n) episodi") }
+        if let n = media?.episodes ?? series?.totalEpisodes { parts.append(String(localized: "\(n) episodes")) }
         if let s = media?.averageScore { parts.append("★ \(s)%") }
         return parts.joined(separator: " · ")
     }
@@ -231,14 +234,14 @@ struct TVTitleView: View {
         if case .aniList(let m) = ref { media = m }
         if let id = ref.aniListId {
             media = (try? await session.api.aniListMedia(id)) ?? media
-            entry = (try? await session.api.aniListEntry(id)) ?? nil
+            entry = (try? await session.api.trackerEntry(id)) ?? nil
             series = (try? await session.api.series(aniListId: id)) ?? series
         }
         if let series { episodes = (try? await session.api.episodes(seriesId: series.id)) ?? [] }
         loaded = true
     }
 
-    /// "Simili": AniList's recommendations; titles already on the NAS open their NAS page.
+    /// "Similar": AniList's recommendations; titles already on the server open their server page.
     private func loadSimilar() async {
         guard similar == nil else { return }
         guard let id = ref.aniListId ?? media?.id else { similar = []; return }
@@ -246,7 +249,7 @@ struct TVTitleView: View {
         async let lib = try? session.api.library()
         async let rel = try? session.api.aniListRelations(id)
         let (r, l, rl) = await (rec, lib, rel)
-        // Two NAS series can share one AniList id: keep the first instead of crashing.
+        // Two server series can share one AniList id: keep the first instead of crashing.
         let onNAS = Dictionary((l ?? []).compactMap { s in s.aniListId.map { ($0, s) } }, uniquingKeysWith: { first, _ in first })
         var seen = Set<Int>()
         related = (rl ?? []).map { ($0.relation, onNAS[$0.media.id].map(TitleRef.series) ?? .aniList($0.media)) }
@@ -259,7 +262,7 @@ struct TVTitleView: View {
     }
 }
 
-/// "Trova episodi" for the remote: 1 Fonte, 2 Risultati, then pick episodes and send them to the NAS.
+/// "Find episodes" for the remote: 1 Fonte, 2 Risultati, then pick episodes and send them to the server.
 struct TVSourcesView: View {
     let title: String
     let aniListId: Int?
@@ -283,19 +286,19 @@ struct TVSourcesView: View {
                 if sent > 0 {
                     VStack(spacing: 20) {
                         Image(systemName: "checkmark.circle.fill").font(.system(size: 90)).foregroundStyle(DS.accent)
-                        Text("Inviati \(sent) download al NAS").font(DS.display(44, 700))
-                        Text("Li trovi nella coda in Download.").font(DS.body(26)).foregroundStyle(DS.textSecondary)
-                        Button("Chiudi") { dismiss() }
+                        Text("Sent \(sent) downloads to the server").font(DS.display(44, 700))
+                        Text("You'll find them in the Downloads queue.").font(DS.body(26)).foregroundStyle(DS.textSecondary)
+                        Button("Close") { dismiss() }
                     }
                     .frame(maxWidth: .infinity).padding(.top, 80)
                 } else {
-                    Text("Trova episodi").font(DS.display(52, 800))
+                    Text("Find episodes").font(DS.display(52, 800))
                     Text(title).font(DS.body(26)).foregroundStyle(DS.textTertiary)
-                    Text("1 · Fonte").font(DS.display(30, 700))
+                    Text("1 · Source").font(DS.display(30, 700))
                     ScrollView(.horizontal) {
                         HStack(spacing: 16) {
                             ForEach(providers.filter { $0.enabled && $0.canSearch }) { p in
-                                TVChip(title: p.name, selected: p.id == provider?.id) { provider = p }
+                                TVChip(title: LocalizedStringKey(p.name), selected: p.id == provider?.id) { provider = p }
                             }
                         }
                         .padding(.vertical, 8)
@@ -306,8 +309,8 @@ struct TVSourcesView: View {
                         HStack {
                             Text("3 · \(picked.title)").font(DS.display(30, 700)).lineLimit(1)
                             Spacer()
-                            Button("Tutti") { selection = Set(episodes.map(\.ref)) }
-                            Button("Nessuno") { selection = [] }
+                            Button("All") { selection = Set(episodes.map(\.ref)) }
+                            Button("None") { selection = [] }
                         }
                         ForEach(episodes) { ep in
                             Button { if selection.contains(ep.ref) { selection.remove(ep.ref) } else { selection.insert(ep.ref) } } label: {
@@ -319,16 +322,16 @@ struct TVSourcesView: View {
                                 }
                             }
                         }
-                        Button { Task { await send() } } label: { Label("Scarica sul NAS (\(selection.count))", systemImage: "externaldrive.badge.plus") }
+                        Button { Task { await send() } } label: { Label("Download to server (\(selection.count))", systemImage: "externaldrive.badge.plus") }
                             .disabled(selection.isEmpty)
                         if provider?.canSubtitles == true, seriesId != nil {
-                            Button { Task { await refreshSubtitles() } } label: { Label("Aggiorna solo i sottotitoli (ASS)", systemImage: "captions.bubble") }
+                            Button { Task { await refreshSubtitles() } } label: { Label("Update subtitles only (ASS)", systemImage: "captions.bubble") }
                             if let subtitleNote { Text(subtitleNote).font(DS.body(22)).foregroundStyle(DS.textSecondary) }
                         }
-                        Button("← Risultati") { self.picked = nil; episodes = [] }
+                        Button("← Results") { self.picked = nil; episodes = [] }
                     } else {
-                        Text("2 · Risultati").font(DS.display(30, 700))
-                        if results.isEmpty && !loading { Text("Nessun risultato.").font(DS.body(26)).foregroundStyle(DS.textTertiary) }
+                        Text("2 · Results").font(DS.display(30, 700))
+                        if results.isEmpty && !loading { Text("No results.").font(DS.body(26)).foregroundStyle(DS.textTertiary) }
                         ForEach(results) { r in
                             Button { Task { await open(r) } } label: {
                                 VStack(alignment: .leading, spacing: 4) {
@@ -370,10 +373,10 @@ struct TVSourcesView: View {
 
     private func refreshSubtitles() async {
         guard let provider, let picked, let seriesId else { return }
-        subtitleNote = "Invio…"
+        subtitleNote = String(localized: "Sending…")
         do {
             let r = try await session.api.refreshSubtitles(seriesId: seriesId, source: provider.id, seriesRef: picked.ref)
-            subtitleNote = "\(r.queued) episodi in coda per i sottotitoli. Segui l'avanzamento in Download."
+            subtitleNote = String(localized: "\(r.queued) episodes queued for subtitles. Follow the progress in Downloads.")
         } catch { subtitleNote = error.localizedDescription }
     }
 

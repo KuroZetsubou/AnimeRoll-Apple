@@ -16,12 +16,12 @@ struct LoginView: View {
             VStack(spacing: 24) {
                 VStack(alignment: .leading, spacing: 6) {
                     (Text("Anime") + Text("Roll").foregroundStyle(DS.accent)).font(DS.display(44, 800)).tracking(-0.9)
-                    Text("Il tuo catalogo anime sul NAS").font(DS.body(16)).foregroundStyle(Theme.textSecondary)
+                    Text("Your anime catalog on your server").font(DS.body(16)).foregroundStyle(Theme.textSecondary)
                 }
                 .padding(.top, 72)
 
                 VStack(spacing: 14) {
-                    LoginField(label: "Indirizzo NAS", icon: "server.rack") {
+                    LoginField(label: "Server address", icon: "server.rack") {
                         TextField("https://…", text: $session.serverURLString)
                             .textContentType(.URL).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
                     }
@@ -41,7 +41,7 @@ struct LoginView: View {
                         run { isRegistering ? try await session.register(username: username, password: password)
                                             : try await session.login(username: username, password: password) }
                     } label: {
-                        Text(isRegistering ? "Crea account" : "Accedi")
+                        Text(isRegistering ? "Create account" : "Sign in")
                     }
                     .buttonStyle(PrimaryButtonStyle())
                     .disabled(username.isEmpty || password.isEmpty || busy)
@@ -50,15 +50,15 @@ struct LoginView: View {
                     Button {
                         run { try await session.loginWithPasskey(username: username.isEmpty ? nil : username) }
                     } label: {
-                        Label("Accedi con passkey", systemImage: "person.badge.key.fill")
+                        Label("Sign in with passkey", systemImage: "person.badge.key.fill")
                     }
                     .buttonStyle(PrimaryButtonStyle(prominent: false)).disabled(busy)
 
                     if !offline.items.isEmpty {
-                        Button { session.continueOffline() } label: { Label("Guarda i download offline", systemImage: "arrow.down.circle") }
+                        Button { session.continueOffline() } label: { Label("Watch offline downloads", systemImage: "arrow.down.circle") }
                             .buttonStyle(PrimaryButtonStyle(prominent: false))
                     }
-                    Button(isRegistering ? "Ho già un account" : "Primo avvio? Crea l'account") { isRegistering.toggle() }
+                    Button(isRegistering ? "I already have an account" : "First launch? Create the account") { isRegistering.toggle() }
                         .font(DS.body(14, 600)).foregroundStyle(DS.accent)
                 }
                 if busy { ProgressView() }
@@ -82,12 +82,12 @@ struct LoginView: View {
 
 /// Labelled login field with a leading icon.
 private struct LoginField<Field: View>: View {
-    let label: String
+    let label: LocalizedStringKey
     let icon: String
     @ViewBuilder let field: () -> Field
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(label.uppercased()).font(DS.body(12, 700)).tracking(1).foregroundStyle(DS.textTertiary)
+            Text(label).textCase(.uppercase).font(DS.body(12, 700)).tracking(1).foregroundStyle(DS.textTertiary)
             HStack(spacing: 10) {
                 Image(systemName: icon).foregroundStyle(DS.textTertiary).frame(width: 20)
                 field().font(DS.body(16)).textFieldStyle(.plain)

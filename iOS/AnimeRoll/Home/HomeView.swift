@@ -21,7 +21,7 @@ final class HomeModel {
         } catch { self.error = error.localizedDescription }
     }
 
-    /// Every genre we have something for, NAS genres first.
+    /// Every genre we have something for, server genres first.
     var genres: [String] {
         var seen = Set<String>(), out: [String] = []
         let all = library.flatMap(\.genreList) + (home?.trending ?? []).flatMap(\.genres) + (home?.seasonal ?? []).flatMap(\.genres)
@@ -29,7 +29,7 @@ final class HomeModel {
         return out
     }
 
-    /// Up to three genres with at least 2 NAS series, most common first.
+    /// Up to three genres with at least 2 server series, most common first.
     var nasGenreShelves: [(genre: String, series: [SeriesDTO])] {
         let counts = Dictionary(grouping: library.flatMap { s in s.genreList.map { ($0, s) } }, by: \.0)
         return counts.map { (genre: $0.key, series: $0.value.map(\.1)) }
@@ -63,7 +63,7 @@ struct HomeView: View {
                     Button { path.append(.search) } label: {
                         HStack(spacing: 10) {
                             Image(systemName: "magnifyingglass")
-                            Text("Cerca nella libreria e su AniList").font(DS.body(15))
+                            Text("Search the library and AniList").font(DS.body(15))
                             Spacer()
                         }
                         .foregroundStyle(DS.textSecondary).padding(.horizontal, 16).frame(height: 48)
@@ -73,9 +73,9 @@ struct HomeView: View {
 
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
-                            Chip(title: "Tutti", selected: genre == nil) { withAnimation(DS.base) { genre = nil } }
+                            Chip(title: "All", selected: genre == nil) { withAnimation(DS.base) { genre = nil } }
                             ForEach(Array(model.genres.prefix(12)), id: \.self) { g in
-                                Chip(title: g, selected: genre == g) { withAnimation(DS.base) { genre = g } }
+                                Chip(title: LocalizedStringKey(g), selected: genre == g) { withAnimation(DS.base) { genre = g } }
                             }
                         }
                         .padding(.horizontal)
@@ -110,22 +110,22 @@ struct HomeView: View {
                          play: { await playHero($0) }, open: { openTitle(.aniList($0)) })
         }
         if genre == nil {
-            Shelf(title: "Continua a guardare", items: home.continueWatching) { item in
+            Shelf(title: "Continue watching", items: home.continueWatching) { item in
                 ContinueCard(item: item, play: { Haptics.tick(); playing = .episode(item.episode, series: item.series, playlist: []) },
                              info: { openTitle(.series(item.series)) })
             }
         }
-        Shelf(title: "Stai guardando su AniList", items: watching) { entry in
-            posterButton(.aniList(entry.media), meta: "\(entry.progress)/\(entry.media.episodes.map(String.init) ?? "?") episodi")
+        Shelf(title: "Watching on your list", items: watching) { entry in
+            posterButton(.aniList(entry.media), meta: String(localized: "\(entry.progress)/\(entry.media.episodes.map(String.init) ?? "?") episodes"))
         }
-        Shelf(title: "Pianificati da vedere", items: model.planning.filter { inGenre($0.media) }) { e in
-            posterButton(.aniList(e.media), meta: ([e.media.episodes.map { "\($0) episodi" }, e.media.genres.first].compactMap { $0 }).joined(separator: " · "))
+        Shelf(title: "Planned to watch", items: model.planning.filter { inGenre($0.media) }) { e in
+            posterButton(.aniList(e.media), meta: ([e.media.episodes.map { String(localized: "\($0) episodes") }, e.media.genres.first].compactMap { $0 }).joined(separator: " · "))
         }
-        Shelf(title: "Sul tuo NAS", items: genre == nil ? home.recentlyAdded : home.recentlyAdded.filter { $0.genreList.contains(genre!) }) { s in
+        Shelf(title: "On your server", items: genre == nil ? home.recentlyAdded : home.recentlyAdded.filter { $0.genreList.contains(genre!) }) { s in
             posterButton(.series(s), badge: "\(s.episodeCount) ep", meta: s.year.map(String.init))
         }
-        Shelf(title: "Questa stagione", items: home.seasonal.filter(inGenre)) { m in posterButton(.aniList(m), meta: m.genres.first) }
-        Shelf(title: "Di tendenza", items: Array(home.trending.filter(inGenre).prefix(10).enumerated().map { RankedItem(rank: $0.offset + 1, media: $0.element) })) { item in
+        Shelf(title: "This season", items: home.seasonal.filter(inGenre)) { m in posterButton(.aniList(m), meta: m.genres.first) }
+        Shelf(title: "Trending", items: Array(home.trending.filter(inGenre).prefix(10).enumerated().map { RankedItem(rank: $0.offset + 1, media: $0.element) })) { item in
             Button { openTitle(.aniList(item.media)) } label: {
                 RankedPoster(rank: item.rank, url: item.media.coverUrl.flatMap(URL.init(string:)))
             }
@@ -138,7 +138,7 @@ struct HomeView: View {
             .buttonStyle(.plain)
     }
 
-    /// Plays the next episode when the title is on the NAS, otherwise opens its page.
+    /// Plays the next episode when the title is on the server, otherwise opens its page.
     private func playHero(_ media: AniListMedia) async {
         Haptics.tick()
         guard let series = try? await session.api.series(aniListId: media.id),
@@ -221,12 +221,12 @@ struct HeroCarousel: View {
             .overlay(DS.scrimBottom)
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: 4) {
-                    BadgeLabel(text: "In evidenza")
+                    BadgeLabel(text: "Featured")
                     Text(m.title).font(DS.display(32, 800)).lineLimit(2).minimumScaleFactor(0.7).padding(.top, 6)
-                    Text(([m.year.map(String.init), m.genres.prefix(3).joined(separator: " · "), m.episodes.map { "\($0) episodi" }]
+                    Text(([m.year.map(String.init), m.genres.prefix(3).joined(separator: " · "), m.episodes.map { String(localized: "\($0) episodes") }]
                         .compactMap { $0 }.filter { !$0.isEmpty }).joined(separator: " · "))
                         .font(DS.body(13)).foregroundStyle(DS.textSecondary).lineLimit(1).padding(.bottom, 10)
-                    Button { open(m) } label: { Label("Scopri", systemImage: "info.circle") }
+                    Button { open(m) } label: { Label("Discover", systemImage: "info.circle") }
                         .buttonStyle(PrimaryButtonStyle(small: true))
                 }
                 .padding(16).padding(.trailing, 60)
@@ -277,10 +277,10 @@ struct ContinueCard: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.series.title).font(DS.body(13, 600)).lineLimit(1)
-                    Text("Episodio \(item.episode.numberLabel)").font(DS.body(12)).foregroundStyle(DS.textTertiary)
+                    Text("Episode \(item.episode.numberLabel)").font(DS.body(12)).foregroundStyle(DS.textTertiary)
                 }
                 Spacer()
-                Button(action: info) { Image(systemName: "info.circle").foregroundStyle(DS.textSecondary) }.accessibilityLabel("Dettagli")
+                Button(action: info) { Image(systemName: "info.circle").foregroundStyle(DS.textSecondary) }.accessibilityLabel("Details")
             }
             .padding(.top, 8)
         }
@@ -315,7 +315,7 @@ struct CategoriesOverlay: View {
                 Image(systemName: "xmark").font(.title2.bold()).foregroundStyle(.black)
                     .frame(width: 60, height: 60).background(.white, in: .circle)
             }
-            .accessibilityLabel("Chiudi")
+            .accessibilityLabel("Close")
             .padding(.bottom, 30)
         }
     }
@@ -397,8 +397,8 @@ struct DualPaneHome: View {
             } else {
                 VStack(spacing: 12) {
                     Image(systemName: "rectangle.split.2x1").font(.system(size: 36))
-                    Text("Scegli un titolo").font(DS.display(20, 700)).foregroundStyle(.white)
-                    Text("Il dettaglio e il player si aprono su questa metà.").font(DS.body(14))
+                    Text("Choose a title").font(DS.display(20, 700)).foregroundStyle(.white)
+                    Text("Details and the player open on this half.").font(DS.body(14))
                 }
                 .foregroundStyle(DS.textTertiary).frame(maxWidth: .infinity, maxHeight: .infinity)
             }

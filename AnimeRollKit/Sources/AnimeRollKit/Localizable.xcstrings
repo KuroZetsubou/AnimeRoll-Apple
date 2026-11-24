@@ -1,0 +1,226 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "Anime": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anime"
+          }
+        }
+      }
+    },
+    "Cannot play the video.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile riprodurre il video."
+          }
+        }
+      }
+    },
+    "Conflict.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conflitto."
+          }
+        }
+      }
+    },
+    "High": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alta"
+          }
+        }
+      }
+    },
+    "Invalid credentials.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credenziali non valide."
+          }
+        }
+      }
+    },
+    "Invalid passkey options": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opzioni passkey non valide"
+          }
+        }
+      }
+    },
+    "Invalid server address.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indirizzo del server non valido."
+          }
+        }
+      }
+    },
+    "Loading…": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Caricamento…"
+          }
+        }
+      }
+    },
+    "Low": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bassa"
+          }
+        }
+      }
+    },
+    "Next episode (E%lld): %@": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prossimo episodio (E%lld): %@"
+          }
+        }
+      }
+    },
+    "Normal": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Normale"
+          }
+        }
+      }
+    },
+    "Now": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subito"
+          }
+        }
+      }
+    },
+    "Passkey registration cancelled": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registrazione passkey annullata"
+          }
+        }
+      }
+    },
+    "Passkey sign-in cancelled": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accesso con passkey annullato"
+          }
+        }
+      }
+    },
+    "Repair": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riparazione"
+          }
+        }
+      }
+    },
+    "Roll": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Roll"
+          }
+        }
+      }
+    },
+    "Series %lld": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serie %lld"
+          }
+        }
+      }
+    },
+    "Server error (%lld).": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Errore del server (%lld)."
+          }
+        }
+      }
+    },
+    "Session expired, sign in again.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sessione scaduta, accedi di nuovo."
+          }
+        }
+      }
+    },
+    "Stream not found": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stream non trovato"
+          }
+        }
+      }
+    },
+    "The server answered with error %lld. Try again later.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il server ha risposto con l'errore %lld. Riprova più tardi."
+          }
+        }
+      }
+    },
+    "Wrong passcode.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passcode errato."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

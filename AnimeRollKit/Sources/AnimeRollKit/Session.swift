@@ -8,7 +8,7 @@ import Security
 public final class AppSession {
     public private(set) var user: UserDTO?
     public private(set) var isRestoring = true
-    /// The NAS could not be reached at launch: the app opens with the last known user so
+    /// The server could not be reached at launch: the app opens with the last known user so
     /// episodes saved on the device stay playable (away from home, no network).
     public private(set) var isOffline = false
     public var serverURLString: String {
@@ -29,13 +29,13 @@ public final class AppSession {
         defer { isRestoring = false }
         guard api.token != nil else { return }
         do {
-            // Away from home the NAS can hang instead of refusing: give up after a few seconds and open offline.
+            // Away from home the server can hang instead of refusing: give up after a few seconds and open offline.
             setUser(try await Self.withTimeout(seconds: 8) { try await self.api.me() })
             isOffline = false
         } catch APIError.notLoggedIn {
             logout()
         } catch APIError.http(let code, _) where code == 401 || code == 403 {
-            logout()   // the NAS answered: the saved login is no longer valid
+            logout()   // the server answered: the saved login is no longer valid
         } catch {
             user = Self.cachedUser
             isOffline = user != nil
@@ -53,15 +53,15 @@ public final class AppSession {
         }
     }
 
-    /// Opens the app without a login, only to play what is saved on this device (the NAS is unreachable
-    /// and there is no remembered user, e.g. right after a reinstall of the NAS-side account).
+    /// Opens the app without a login, only to play what is saved on this device (the server is unreachable
+    /// and there is no remembered user, e.g. right after a reinstall of the server-side account).
     public func continueOffline() {
         let json = #"{"id":"00000000-0000-0000-0000-000000000000","username":"Offline","aniListConnected":false,"passkeyCount":0}"#
         user = try? APIClient.decoder.decode(UserDTO.self, from: Data(json.utf8))
         isOffline = user != nil
     }
 
-    /// Called when the app comes back to the foreground: leaves offline mode once the NAS answers.
+    /// Called when the app comes back to the foreground: leaves offline mode once the server answers.
     public func retryIfOffline() async {
         guard isOffline, let u = try? await api.me() else { return }
         setUser(u)
@@ -105,6 +105,23 @@ public final class AppSession {
         await refreshUser()
     }
 
+    /// Switches to another profile ("Who's watching?"); throws when the passcode is wrong.
+    public func enterProfile(_ id: UUID, passcode: String?) async throws {
+        accept(try await api.enterProfile(id, passcode: passcode))
+        profilePicked = true
+    }
+
+    /// The profile picker is shown once per launch after sign-in, when the server has more than one profile.
+    public var profilePicked = false
+    public var showProfilePicker = false
+
+    /// After sign-in: with more than one profile on the server, asks "Who's watching?" once.
+    public func checkProfilePicker() async {
+        guard isLoggedIn, !isOffline, !profilePicked else { return }
+        let count = (try? await api.profiles().count) ?? 0
+        if count > 1 { showProfilePicker = true } else { profilePicked = true }
+    }
+
     public func refreshUser() async {
         if let u = try? await api.me() { setUser(u); isOffline = false }
     }
@@ -117,6 +134,8 @@ public final class AppSession {
     }
 
     public func logout() {
+        profilePicked = false
+        showProfilePicker = false
         api.token = nil
         Keychain.delete("token")
         setUser(nil)
@@ -125,26 +144,60 @@ public final class AppSession {
 }
 
 enum Keychain {
+    #if DEBUG
+    private static let service = ProcessInfo.processInfo.environment["AR_KEYCHAIN_SERVICE"] ?? "AnimeRoll"
+    /// AR_KEYCHAIN_SERVICE=memory keeps tokens in RAM only: automated test runs never touch the real keychain.
+    private static let inMemory = service == "memory"
+    nonisolated(unsafe) private static var memory: [String: String] = [:]
+    #else
     private static let service = "AnimeRoll"
+    #endif
+
+    #if os(macOS)
+    /// The file-based login keychain asks for the user's password whenever the app's signature changes (every
+    /// development build); the data-protection keychain does not. Falls back to the login keychain when the
+    /// build is not allowed to use it (ad-hoc signed).
+    private static let dataProtection: [String: Any] = [kSecUseDataProtectionKeychain as String: true]
+    #endif
 
     static func read(_ key: String) -> String? {
+        #if DEBUG
+        if inMemory { return memory[key] }
+        #endif
         let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
                                 kSecAttrAccount as String: key, kSecReturnData as String: true]
         var out: AnyObject?
+        #if os(macOS)
+        if SecItemCopyMatching(q.merging(dataProtection) { $1 } as CFDictionary, &out) == errSecSuccess, let data = out as? Data {
+            return String(data: data, encoding: .utf8)
+        }
+        #endif
         guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let data = out as? Data else { return nil }
         return String(data: data, encoding: .utf8)
     }
 
     static func write(_ key: String, _ value: String) {
+        #if DEBUG
+        if inMemory { memory[key] = value; return }
+        #endif
         delete(key)
         let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
                                 kSecAttrAccount as String: key, kSecValueData as String: Data(value.utf8),
                                 kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock]
+        #if os(macOS)
+        if SecItemAdd(q.merging(dataProtection) { $1 } as CFDictionary, nil) == errSecSuccess { return }
+        #endif
         SecItemAdd(q as CFDictionary, nil)
     }
 
     static func delete(_ key: String) {
+        #if DEBUG
+        if inMemory { memory[key] = nil; return }
+        #endif
         let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: key]
+        #if os(macOS)
+        SecItemDelete(q.merging(dataProtection) { $1 } as CFDictionary)
+        #endif
         SecItemDelete(q as CFDictionary)
     }
 }

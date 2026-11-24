@@ -58,7 +58,7 @@ struct AirPlayButton: UIViewRepresentable {
 }
 
 /// AnimeRoll player controls: title on top with PiP / AirPlay, glass ±10 and an orange play in the
-/// middle, "Salta sigla", "Prossimo episodio", an orange scrubber with elapsed / remaining time,
+/// middle, "Skip intro", "Next episode", an orange scrubber with elapsed / remaining time,
 /// Episodi, subtitles and next. Tap the video to show or hide them; they hide after 3 s of playback.
 struct PlayerControls: View {
     let model: PlayerModel
@@ -113,21 +113,21 @@ struct PlayerControls: View {
         GeometryReader { geo in
             let video = SubtitleOverlay.fittedRect(video: model.videoSize, in: geo.size)
         HStack(spacing: 32) {
-                glassRound("gobackward.10", 56, "Indietro 10 secondi") { touch(); model.skip(seconds: -10) }
+                glassRound("gobackward.10", 56, "Back 10 seconds") { touch(); model.skip(seconds: -10) }
                 Button { touch(); Haptics.tick(); model.togglePlayPause() } label: {
                     Image(systemName: playing ? "pause.fill" : "play.fill").font(.system(size: 32, weight: .bold))
                         .foregroundStyle(DS.onAccent).frame(width: 76, height: 76)
                         .background(DS.accent, in: .circle).shadow(color: DS.accent.opacity(0.4), radius: 24)
                 }
-                .buttonStyle(.plain).accessibilityLabel(playing ? "Pausa" : "Riproduci")
-                glassRound("goforward.10", 56, "Avanti 10 secondi") { touch(); model.skip(seconds: 10) }
+                .buttonStyle(.plain).accessibilityLabel(playing ? String(localized: "Pause") : String(localized: "Play"))
+                glassRound("goforward.10", 56, "Forward 10 seconds") { touch(); model.skip(seconds: 10) }
             }
             .position(x: geo.size.width / 2, y: video.midY)
         }
         VStack(spacing: 0) {
             // Top: close, title, PiP, AirPlay.
             HStack(alignment: .top, spacing: 8) {
-                roundButton("chevron.down", "Chiudi", action: close)
+                roundButton("chevron.down", "Close", action: close)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(model.title).font(DS.display(compact ? 16 : 22, 800)).lineLimit(1)
                     if !compact { Text(model.subtitle).font(DS.body(13)).foregroundStyle(DS.textSecondary).lineLimit(1) }
@@ -148,7 +148,7 @@ struct PlayerControls: View {
             HStack(alignment: .bottom) {
                 if current < 150 && duration > 300 {
                     Button { touch(); model.skip(seconds: 85) } label: {
-                        Label("Salta sigla", systemImage: "forward.fill").font(DS.display(14, 700)).padding(.horizontal, 16).frame(height: 40).glassCapsule()
+                        Label("Skip intro", systemImage: "forward.fill").font(DS.display(14, 700)).padding(.horizontal, 16).frame(height: 40).glassCapsule()
                     }
                     .buttonStyle(.plain)
                 }
@@ -156,10 +156,10 @@ struct PlayerControls: View {
                 if model.showNextUp, let next = model.nextEpisode {
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 1) {
-                            Text("Prossimo episodio").font(DS.body(11)).foregroundStyle(DS.textSecondary)
+                            Text("Next episode").font(DS.body(11)).foregroundStyle(DS.textSecondary)
                             Text("E\(next.numberLabel)\(next.title.map { " · \($0)" } ?? "")").font(DS.body(14, 700)).lineLimit(1)
                         }
-                        Button("Avvia") { Task { await model.playNext() } }.buttonStyle(PrimaryButtonStyle(small: true))
+                        Button("Start") { Task { await model.playNext() } }.buttonStyle(PrimaryButtonStyle(small: true))
                     }
                     .padding(.leading, 16).padding(.trailing, 10).padding(.vertical, 10)
                     .glassRect()
@@ -170,13 +170,13 @@ struct PlayerControls: View {
             if compact {
                 // One row at the bottom: episodes, time, bar, remaining, audio / subtitles / next.
                 HStack(spacing: 10) {
-                    if isEpisode { roundButton("list.bullet.rectangle", "Episodi") { showEpisodes = true } }
+                    if isEpisode { roundButton("list.bullet.rectangle", "Episodes") { showEpisodes = true } }
                     Text(timeLabel(current)).font(DS.body(12, 600).monospacedDigit())
                     scrubber(current: current, duration: duration)
                     Text("-" + timeLabel(max(0, duration - current))).font(DS.body(12, 600).monospacedDigit()).foregroundStyle(DS.textSecondary)
                     AudioMenu(model: model, compact: true)
                     SubtitleMenu(controller: model.subtitles, compact: true)
-                    if model.nextEpisode != nil { roundButton("forward.end.fill", "Episodio successivo") { Task { await model.playNext() } } }
+                    if model.nextEpisode != nil { roundButton("forward.end.fill", "Next episode") { Task { await model.playNext() } } }
                 }
                 .padding(.trailing, cutTrailing ? insets.trailing : 0)
             } else {
@@ -188,14 +188,14 @@ struct PlayerControls: View {
 
             HStack(spacing: 4) {
                 if isEpisode {
-                    Button { touch(); showEpisodes = true } label: { Label("Episodi", systemImage: "list.bullet.rectangle") }
+                    Button { touch(); showEpisodes = true } label: { Label("Episodes", systemImage: "list.bullet.rectangle") }
                         .buttonStyle(GhostButtonStyle())
                 }
                 Spacer()
                 AudioMenu(model: model)
                 SubtitleMenu(controller: model.subtitles)
                 if model.nextEpisode != nil {
-                    roundButton("forward.end.fill", "Episodio successivo") { Task { await model.playNext() } }
+                    roundButton("forward.end.fill", "Next episode") { Task { await model.playNext() } }
                 }
             }
             .padding(.trailing, cutTrailing ? insets.trailing : 0)
@@ -270,8 +270,8 @@ struct Scrubber: View {
         }
         .frame(height: 22)
         .accessibilityElement()
-        .accessibilityLabel("Posizione")
-        .accessibilityValue("\(Int(value)) secondi su \(Int(duration))")
+        .accessibilityLabel("Position")
+        .accessibilityValue("\(Int(value)) seconds of \(Int(duration))")
         .accessibilityAdjustableAction { dir in
             let t = dir == .increment ? value + 10 : value - 10
             onEnd(min(max(0, t), duration))
@@ -290,7 +290,7 @@ struct PlayerEpisodesSheet: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("Episodi").font(DS.display(20, 700)).padding(.top, 24).padding(.bottom, 8)
+                    Text("Episodes").font(DS.display(20, 700)).padding(.top, 24).padding(.bottom, 8)
                     ForEach(model.playlistEpisodes) { ep in
                         let current = ep.id == model.currentEpisode?.id
                         Button { done(); Task { await model.play(ep) } } label: {
@@ -302,7 +302,7 @@ struct PlayerEpisodesSheet: View {
                                 }
                                 .frame(width: 36, height: 36)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(ep.title ?? "Episodio \(ep.numberLabel)").font(DS.body(15, 600)).lineLimit(1)
+                                    Text(ep.title ?? "Episode \(ep.numberLabel)").font(DS.body(15, 600)).lineLimit(1)
                                     if let d = ep.durationSeconds { Text(d.durationLabel).font(DS.body(12)).foregroundStyle(DS.textTertiary) }
                                 }
                                 Spacer()

@@ -1,7 +1,7 @@
 import AnimeRollKit
 import SwiftUI
 
-/// Download: the NAS queue (job cards with inline actions) and what is saved on this device.
+/// Download: the server queue (job cards with inline actions) and what is saved on this device.
 struct DownloadsView: View {
     @Environment(AppSession.self) private var session
     @Environment(OfflineDownloads.self) private var offline
@@ -12,10 +12,10 @@ struct DownloadsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                ScreenTitle("Download")
-                PillSegmented(options: ["Sul NAS", "Su questo dispositivo"], selection: $scope)
+                ScreenTitle("Downloads")
+                PillSegmented(options: ["On server", "On this device"], selection: $scope)
                 if session.isOffline {
-                    Label("NAS non raggiungibile: puoi guardare gli episodi salvati sul dispositivo.", systemImage: "wifi.slash")
+                    Label("Server unreachable: you can watch the episodes saved on this device.", systemImage: "wifi.slash")
                         .font(DS.body(13)).foregroundStyle(DS.accent)
                         .padding(12).frame(maxWidth: .infinity, alignment: .leading)
                         .background(DS.accentSoft, in: .rect(cornerRadius: DS.rCard))
@@ -38,20 +38,20 @@ struct DownloadsView: View {
         .fullScreenCover(item: $playing) { PlayerScreen(item: $0) }
     }
 
-    // MARK: NAS
+    // MARK: server
 
     @ViewBuilder private var nasSection: some View {
         if jobs.isEmpty {
-            empty("externaldrive", "Dalla pagina di un anime tocca Trova episodi per scaricare sul NAS")
+            empty("externaldrive", "Open an anime and tap Find episodes to download to your server")
         } else {
             let anyPaused = jobs.contains { $0.status == .paused }
             HStack(spacing: 8) {
                 Spacer()
                 Button {
                     act { anyPaused ? try await session.api.resumeAllNASDownloads() : try await session.api.pauseAllNASDownloads() }
-                } label: { Label(anyPaused ? "Riprendi tutto" : "Pausa tutto", systemImage: anyPaused ? "play.fill" : "pause.fill") }
+                } label: { Label(anyPaused ? "Resume all" : "Pause all", systemImage: anyPaused ? "play.fill" : "pause.fill") }
                     .buttonStyle(GhostButtonStyle())
-                Button { act { try await session.api.clearFinishedNASDownloads() } } label: { Label("Pulisci", systemImage: "trash") }
+                Button { act { try await session.api.clearFinishedNASDownloads() } } label: { Label("Clear finished", systemImage: "trash") }
                     .buttonStyle(GhostButtonStyle())
             }
             ForEach(jobs) { job in
@@ -64,16 +64,16 @@ struct DownloadsView: View {
     /// Long-press menu: every queue action, including priority.
     @ViewBuilder private func jobMenu(_ job: DownloadJob) -> some View {
         if job.status == .queued || job.status == .paused {
-            Button("Avvia subito", systemImage: "bolt.fill") { act { try await session.api.startNASDownloadNow(job.id) } }
+            Button("Start now", systemImage: "bolt.fill") { act { try await session.api.startNASDownloadNow(job.id) } }
         }
         if job.status.canPause {
-            Button("Metti in pausa", systemImage: "pause.fill") { act { try await session.api.pauseNASDownload(job.id) } }
+            Button("Pause", systemImage: "pause.fill") { act { try await session.api.pauseNASDownload(job.id) } }
         }
         if job.status.canResume {
-            Button("Riprendi", systemImage: "play.fill") { act { try await session.api.resumeNASDownload(job.id) } }
+            Button("Resume", systemImage: "play.fill") { act { try await session.api.resumeNASDownload(job.id) } }
         }
         if job.status.isActive || job.status == .paused {
-            Picker("Priorità", selection: Binding(
+            Picker("Priority", selection: Binding(
                 get: { DownloadPriority(rawValue: min(max(job.priority ?? 0, -1), 1)) ?? .normal },
                 set: { p in act { try await session.api.setNASDownloadPriority(job.id, p) } })) {
                 ForEach(DownloadPriority.allCases.reversed()) { Text($0.label).tag($0) }
@@ -81,10 +81,10 @@ struct DownloadsView: View {
             .pickerStyle(.menu)
         }
         if job.status.canRetry {
-            Button("Riprova", systemImage: "arrow.clockwise") { act { try await session.api.retryNASDownload(job.id) } }
+            Button("Retry", systemImage: "arrow.clockwise") { act { try await session.api.retryNASDownload(job.id) } }
         }
         if job.status.canCancel {
-            Button("Annulla", systemImage: "xmark", role: .destructive) { act { try await session.api.cancelNASDownload(job.id) } }
+            Button("Cancel", systemImage: "xmark", role: .destructive) { act { try await session.api.cancelNASDownload(job.id) } }
         }
     }
 
@@ -99,18 +99,18 @@ struct DownloadsView: View {
         let items = offline.items.sorted { ($0.series.title, $0.episode.number) < ($1.series.title, $1.episode.number) }
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("\(items.count) episodi offline").font(DS.body(14, 600))
+                Text("\(items.count) offline episodes").font(DS.body(14, 600))
                 Spacer()
-                Text("\(offline.totalBytes.fileSize) usati").font(DS.body(14)).foregroundStyle(DS.textTertiary)
+                Text("\(offline.totalBytes.fileSize) used").font(DS.body(14)).foregroundStyle(DS.textTertiary)
             }
             ProgressLine(value: min(1, Double(offline.totalBytes) / 64_000_000_000))
-            Text("I video sono anche nell'app File, in “Su iPhone › AnimeRoll”. Tieni premuto un episodio per aprirlo in un'altra app.")
+            Text("Videos are also in the Files app, under “On My iPhone › AnimeRoll”. Press and hold an episode to open it in another app.")
                 .font(DS.body(12)).foregroundStyle(DS.textTertiary)
         }
         .padding(16).background(DS.surface, in: .rect(cornerRadius: DS.rCard))
 
         if items.isEmpty && offline.inFlight.isEmpty {
-            empty("iphone.and.arrow.forward", "Tocca la freccia accanto a un episodio per salvarlo sul dispositivo")
+            empty("iphone.and.arrow.forward", "Tap the arrow next to an episode to save it to the device")
         }
         ForEach(items) { item in
             Button {
@@ -124,7 +124,7 @@ struct DownloadsView: View {
                         .clipShape(.rect(cornerRadius: DS.rPoster))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(item.series.title).font(DS.body(15, 600)).lineLimit(1)
-                        Text("Episodio \(item.episode.numberLabel) · \(item.episode.sizeBytes.fileSize)").font(DS.body(12)).foregroundStyle(DS.textTertiary)
+                        Text("Episode \(item.episode.numberLabel) · \(item.episode.sizeBytes.fileSize)").font(DS.body(12)).foregroundStyle(DS.textTertiary)
                     }
                     Spacer()
                 }
@@ -133,9 +133,9 @@ struct DownloadsView: View {
             .buttonStyle(.plain)
             .contextMenu {
                 if let file = offline.localURL(for: item.episode.id) {
-                    ShareLink(item: file) { Label("Apri con…", systemImage: "square.and.arrow.up") }
+                    ShareLink(item: file) { Label("Open with…", systemImage: "square.and.arrow.up") }
                 }
-                Button("Elimina dal dispositivo", systemImage: "trash", role: .destructive) { offline.delete(item.episode.id) }
+                Button("Delete from device", systemImage: "trash", role: .destructive) { offline.delete(item.episode.id) }
             }
         }
     }
@@ -151,7 +151,7 @@ struct DownloadsView: View {
     private func load() async { jobs = (try? await session.api.nasDownloads()) ?? jobs }
 }
 
-/// One NAS job: title, episode · source, coloured status, progress and the actions it allows.
+/// One server job: title, episode · source, coloured status, progress and the actions it allows.
 private struct JobCard: View {
     let job: DownloadJob
     let act: (@escaping () async throws -> Void) -> Void
@@ -173,7 +173,7 @@ private struct JobCard: View {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(job.seriesTitle).font(DS.body(15, 700)).lineLimit(1)
-                    Text([job.episodeNumber.map { "Episodio \($0.formatted())" }, job.sourceLabel,
+                    Text([job.episodeNumber.map { "Episode \($0.formatted())" }, job.sourceLabel,
                           (job.status.isActive || job.status == .paused) ? job.priorityLabel : nil]
                         .compactMap { $0 }.joined(separator: " · "))
                         .font(DS.body(12)).foregroundStyle(DS.textTertiary)
@@ -191,20 +191,20 @@ private struct JobCard: View {
             if job.status != .completed {
                 HStack(spacing: 8) {
                     if job.status.canRetry {
-                        Button("Riprova") { act { try await session.api.retryNASDownload(job.id) } }.buttonStyle(PrimaryButtonStyle(small: true))
+                        Button("Retry") { act { try await session.api.retryNASDownload(job.id) } }.buttonStyle(PrimaryButtonStyle(small: true))
                     }
                     if job.status == .queued || job.status == .paused {
-                        Button { act { try await session.api.startNASDownloadNow(job.id) } } label: { Label("Avvia subito", systemImage: "bolt.fill") }
+                        Button { act { try await session.api.startNASDownloadNow(job.id) } } label: { Label("Start now", systemImage: "bolt.fill") }
                             .buttonStyle(GhostButtonStyle())
                     }
                     if job.status.canPause {
-                        Button("Pausa") { act { try await session.api.pauseNASDownload(job.id) } }.buttonStyle(GhostButtonStyle())
+                        Button("Pause") { act { try await session.api.pauseNASDownload(job.id) } }.buttonStyle(GhostButtonStyle())
                     }
                     if job.status.canResume {
-                        Button("Riprendi") { act { try await session.api.resumeNASDownload(job.id) } }.buttonStyle(PrimaryButtonStyle(small: true))
+                        Button("Resume") { act { try await session.api.resumeNASDownload(job.id) } }.buttonStyle(PrimaryButtonStyle(small: true))
                     }
                     if job.status.canCancel && job.status != .postProcessing {
-                        Button("Annulla") { act { try await session.api.cancelNASDownload(job.id) } }.buttonStyle(PrimaryButtonStyle(prominent: false, small: true))
+                        Button("Cancel") { act { try await session.api.cancelNASDownload(job.id) } }.buttonStyle(PrimaryButtonStyle(prominent: false, small: true))
                     }
                 }
             }

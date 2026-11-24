@@ -2,12 +2,12 @@ import AnimeRollKit
 import SwiftUI
 
 extension Notification.Name {
-    /// Asks MainView to switch to the Download tab (after sending downloads to the NAS).
+    /// Asks MainView to switch to the Download tab (after sending downloads to the server).
     static let showDownloads = Notification.Name("AnimeRoll.showDownloads")
 }
 
-/// "Trova episodi", guided: 1 Fonte, 2 Cerca (or a link for download-only sources),
-/// 3 Risultati → pick the episodes → "Scarica sul NAS (n)". Streaming stays available per episode.
+/// "Find episodes", guided: 1 Fonte, 2 Cerca (or a link for download-only sources),
+/// 3 Risultati → pick the episodes → "Scarica sul server (n)". Streaming stays available per episode.
 struct SourcesSheet: View {
     let title: String
     let aniListId: Int?
@@ -49,7 +49,7 @@ struct SourcesSheet: View {
             query = title
             providers = ((try? await session.api.providers()) ?? []).filter(\.enabled)
             provider = providers.first
-            if providers.isEmpty { error = "Nessuna fonte attiva sul NAS." }
+            if providers.isEmpty { error = String(localized: "No active source on the server.") }
         }
         .task(id: provider?.id) { await search() }
     }
@@ -60,32 +60,32 @@ struct SourcesSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Trova episodi").font(DS.display(24, 800))
+                    Text("Find episodes").font(DS.display(24, 800))
                     Text(title).font(DS.body(13)).foregroundStyle(DS.textTertiary).lineLimit(1)
                 }
                 Spacer()
                 Button { dismiss() } label: {
                     Image(systemName: "xmark").font(.body.bold()).frame(width: 40, height: 40).background(DS.surface, in: .circle)
                 }
-                .buttonStyle(.plain).accessibilityLabel("Chiudi")
+                .buttonStyle(.plain).accessibilityLabel("Close")
             }
             .padding(.top, 20)
 
-            step(1, "Fonte")
+            step(1, "Source")
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(providers) { p in Chip(title: p.name, selected: p.id == provider?.id) { provider = p } }
+                    ForEach(providers) { p in Chip(title: LocalizedStringKey(p.name), selected: p.id == provider?.id) { provider = p } }
                 }
             }
             if let hint = provider?.hint { Text(hint).font(DS.body(12)).foregroundStyle(DS.textSecondary).padding(.top, 8) }
 
             if manual {
-                step(2, "Link o riferimento")
-                field("https://… o magnet", text: $manualRef, icon: "link").keyboardType(.URL)
-                field("Numero episodio (facoltativo)", text: $manualEpisode, icon: "number").keyboardType(.decimalPad).padding(.top, 10)
+                step(2, "Link or reference")
+                field("https://… or magnet", text: $manualRef, icon: "link").keyboardType(.URL)
+                field("Episode number (optional)", text: $manualEpisode, icon: "number").keyboardType(.decimalPad).padding(.top, 10)
             } else {
-                step(2, "Cerca")
-                field("Titolo da cercare", text: $query, icon: "magnifyingglass", pill: true)
+                step(2, "Search")
+                field("Title to search", text: $query, icon: "magnifyingglass", pill: true)
                     .submitLabel(.search).onSubmit { Task { await search() } }
                 if let picked { episodesStep(picked) } else { resultsStep }
             }
@@ -95,9 +95,9 @@ struct SourcesSheet: View {
     }
 
     @ViewBuilder private var resultsStep: some View {
-        step(3, "Risultati")
+        step(3, "Results")
         if loading { ProgressView().frame(maxWidth: .infinity).padding(.vertical, 20) }
-        else if results.isEmpty { Text("Nessun risultato.").font(DS.body(14)).foregroundStyle(DS.textSecondary) }
+        else if results.isEmpty { Text("No results.").font(DS.body(14)).foregroundStyle(DS.textSecondary) }
         ForEach(results) { r in
             Button { open(r) } label: {
                 HStack(spacing: 12) {
@@ -124,8 +124,8 @@ struct SourcesSheet: View {
             stepBadge(3)
             Text(r.title).font(DS.body(15, 700)).lineLimit(1)
             Spacer()
-            Button("Tutti") { selection = Set(episodes.map(\.ref)) }
-            Button("Nessuno") { selection = [] }.padding(.leading, 10)
+            Button("All") { selection = Set(episodes.map(\.ref)) }
+            Button("None") { selection = [] }.padding(.leading, 10)
         }
         .font(DS.body(14, 600)).tint(DS.accent).padding(.top, 18).padding(.bottom, 4)
         if loading { ProgressView().frame(maxWidth: .infinity).padding(.vertical, 20) }
@@ -149,13 +149,13 @@ struct SourcesSheet: View {
                 .buttonStyle(.plain)
                 if provider?.canStream == true, onStream != nil {
                     Button { Task { await stream(ep) } } label: { Image(systemName: "play.circle").font(.title3) }
-                        .buttonStyle(.plain).foregroundStyle(DS.textSecondary).accessibilityLabel("Guarda ora")
+                        .buttonStyle(.plain).foregroundStyle(DS.textSecondary).accessibilityLabel("Watch now")
                 }
             }
             Divider().overlay(DS.hairline)
         }
         Button { withAnimation(DS.base) { picked = nil; episodes = [] } } label: {
-            Label("Risultati", systemImage: "chevron.left").font(DS.body(14, 600))
+            Label("Results", systemImage: "chevron.left").font(DS.body(14, 600))
         }
         .tint(DS.textSecondary).padding(.top, 12)
     }
@@ -163,16 +163,16 @@ struct SourcesSheet: View {
     private var bottomBar: some View {
         VStack(spacing: 10) {
             Button { Task { await send() } } label: {
-                Label("Scarica sul NAS (\(count))", systemImage: "externaldrive.badge.plus")
+                Label("Download to server (\(count))", systemImage: "externaldrive.badge.plus")
             }
             .buttonStyle(PrimaryButtonStyle()).disabled(count == 0).opacity(count == 0 ? 0.4 : 1)
             if !manual, provider?.canSubtitles == true, picked != nil, seriesId != nil {
-                Button { Task { await refreshSubtitles() } } label: { Label("Aggiorna solo i sottotitoli (ASS)", systemImage: "captions.bubble") }
+                Button { Task { await refreshSubtitles() } } label: { Label("Update subtitles only (ASS)", systemImage: "captions.bubble") }
                     .buttonStyle(PrimaryButtonStyle(prominent: false))
                 if let subtitleNote { Text(subtitleNote).font(DS.body(12)).foregroundStyle(DS.textSecondary).multilineTextAlignment(.center) }
             }
             if !manual, provider?.canStream == true, onStream != nil, let first = selectedEpisodes.first ?? episodes.first {
-                Button { Task { await stream(first) } } label: { Label("Guarda subito in streaming", systemImage: "play.fill") }
+                Button { Task { await stream(first) } } label: { Label("Watch now by streaming", systemImage: "play.fill") }
                     .buttonStyle(PrimaryButtonStyle(prominent: false))
             }
         }
@@ -183,14 +183,14 @@ struct SourcesSheet: View {
     private var sentView: some View {
         VStack(spacing: 12) {
             Image(systemName: "checkmark.circle.fill").font(.system(size: 48)).foregroundStyle(DS.accent).padding(.top, 48)
-            Text("Inviati \(sent) download al NAS").font(DS.display(20, 700))
-            Text("Li trovi nella coda in Download.").font(DS.body(14)).foregroundStyle(DS.textSecondary)
-            Button("Vai a Download") {
+            Text("Sent \(sent) downloads to the server").font(DS.display(20, 700))
+            Text("You'll find them in the Downloads queue.").font(DS.body(14)).foregroundStyle(DS.textSecondary)
+            Button("Go to Downloads") {
                 dismiss()
                 NotificationCenter.default.post(name: .showDownloads, object: nil)
             }
             .buttonStyle(PrimaryButtonStyle()).padding(.top, 8)
-            Button("Chiudi") { dismiss() }.buttonStyle(PrimaryButtonStyle(prominent: false))
+            Button("Close") { dismiss() }.buttonStyle(PrimaryButtonStyle(prominent: false))
         }
         .padding(.horizontal, 20)
     }
@@ -256,11 +256,11 @@ struct SourcesSheet: View {
 
     private func refreshSubtitles() async {
         guard let provider, let picked, let seriesId else { return }
-        subtitleNote = "Invio…"
+        subtitleNote = String(localized: "Sending…")
         do {
             let r = try await session.api.refreshSubtitles(seriesId: seriesId, source: provider.id, seriesRef: picked.ref)
-            let missing = r.notFound.isEmpty ? "" : " · non trovati su \(provider.name): " + r.notFound.map { String(format: "%g", $0) }.joined(separator: ", ")
-            subtitleNote = "\(r.queued) episodi in coda per i sottotitoli\(missing). Segui l'avanzamento in Download."
+            let missing = r.notFound.isEmpty ? "" : String(localized: " · not found on \(provider.name): ") + r.notFound.map { String(format: "%g", $0) }.joined(separator: ", ")
+            subtitleNote = String(localized: "\(r.queued) episodes queued for subtitles") + missing + String(localized: ". Follow the progress in Downloads.")
         } catch { subtitleNote = error.localizedDescription }
     }
 

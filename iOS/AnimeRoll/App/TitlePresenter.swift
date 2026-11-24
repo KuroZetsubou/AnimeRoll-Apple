@@ -71,7 +71,7 @@ struct TitleSheetHost: ViewModifier {
                     Image(systemName: "chevron.left").font(.title3.bold()).foregroundStyle(.white)
                         .frame(width: 56, height: 56).glassCircle()
                 }
-                .accessibilityLabel("Indietro")
+                .accessibilityLabel("Back")
                 .padding(.top, 120).padding(.trailing, 12)
                 .transition(.opacity)
             }

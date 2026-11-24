@@ -1,0 +1,1681 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "": {
+      "shouldTranslate": false
+    },
+    "%@ %@": {
+      "shouldTranslate": false
+    },
+    "%@ free": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ liberi"
+          }
+        }
+      }
+    },
+    "%@ · E%@": {
+      "shouldTranslate": false
+    },
+    "%lld": {
+      "shouldTranslate": false
+    },
+    "%lld episodes": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld episodi"
+          }
+        }
+      }
+    },
+    "%lld episodes queued for subtitles. Follow the progress in Downloads.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld episodi in coda per i sottotitoli. Segui l'avanzamento in Download."
+          }
+        }
+      }
+    },
+    "%lld offline episodes · %@ used": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld episodi offline · %@ usati"
+          }
+        }
+      }
+    },
+    "%lld series on the server": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld serie sul server"
+          }
+        }
+      }
+    },
+    "%lld titles": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld titoli"
+          }
+        }
+      }
+    },
+    "%lld/%@ episodes": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld/%@ episodi"
+          }
+        }
+      }
+    },
+    "1 · Source": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 · Fonte"
+          }
+        }
+      }
+    },
+    "2 · Results": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2 · Risultati"
+          }
+        }
+      }
+    },
+    "3 · %@": {
+      "shouldTranslate": false
+    },
+    "Account": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account"
+          }
+        }
+      }
+    },
+    "Add profile": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi profilo"
+          }
+        }
+      }
+    },
+    "All": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tutti"
+          }
+        }
+      }
+    },
+    "Anime": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anime"
+          }
+        }
+      }
+    },
+    "Anime title": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Titolo anime"
+          }
+        }
+      }
+    },
+    "Below the reserve the server refuses new downloads and imports. To free space, delete episodes from the title page.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sotto la riserva il server rifiuta nuovi download e import. Per liberare spazio elimina episodi dalla pagina del titolo."
+          }
+        }
+      }
+    },
+    "Cancel": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annulla"
+          }
+        }
+      }
+    },
+    "Change AniList ID…": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambia ID AniList…"
+          }
+        }
+      }
+    },
+    "Change or remove passcode": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambia o rimuovi il passcode"
+          }
+        }
+      }
+    },
+    "Choose a status first to add this title to your list, then you can rate it.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scegli prima uno stato per aggiungere il titolo alla lista, poi potrai votarlo."
+          }
+        }
+      }
+    },
+    "Clear finished": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pulisci"
+          }
+        }
+      }
+    },
+    "Close": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chiudi"
+          }
+        }
+      }
+    },
+    "Completed": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Completato"
+          }
+        }
+      }
+    },
+    "Connect a list from Profile": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collega AniList dal Profilo"
+          }
+        }
+      }
+    },
+    "Continue watching": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continua a guardare"
+          }
+        }
+      }
+    },
+    "Create profile": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crea profilo"
+          }
+        }
+      }
+    },
+    "Current passcode": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passcode attuale"
+          }
+        }
+      }
+    },
+    "Delete": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elimina"
+          }
+        }
+      }
+    },
+    "Delete episode %@": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elimina episodio %@"
+          }
+        }
+      }
+    },
+    "Delete failed": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminazione non riuscita"
+          }
+        }
+      }
+    },
+    "Delete from server…": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elimina dal server…"
+          }
+        }
+      }
+    },
+    "Delete profile": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elimina profilo"
+          }
+        }
+      }
+    },
+    "Delete the episode from the server?": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminare l'episodio dal server?"
+          }
+        }
+      }
+    },
+    "Delete the series and all its episodes": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elimina la serie e tutti gli episodi"
+          }
+        }
+      }
+    },
+    "Delete the whole series from the server?": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminare tutta la serie dal server?"
+          }
+        }
+      }
+    },
+    "Delete the whole series from the server…": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elimina tutta la serie dal server…"
+          }
+        }
+      }
+    },
+    "Delete this profile": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elimina questo profilo"
+          }
+        }
+      }
+    },
+    "Delete this profile?": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminare questo profilo?"
+          }
+        }
+      }
+    },
+    "Disconnect": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scollega"
+          }
+        }
+      }
+    },
+    "Discover": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scopri"
+          }
+        }
+      }
+    },
+    "Download failed": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download non riuscito"
+          }
+        }
+      }
+    },
+    "Download something to your server or put files in /media/_inbox and press Import": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scarica qualcosa sul server o metti i file in /media/_inbox e premi Importa"
+          }
+        }
+      }
+    },
+    "Download to Apple TV": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scarica su Apple TV"
+          }
+        }
+      }
+    },
+    "Download to server (%lld)": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scarica sul server (%lld)"
+          }
+        }
+      }
+    },
+    "Downloading episode #%lld": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scaricamento episodio #%lld"
+          }
+        }
+      }
+    },
+    "Downloads": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download"
+          }
+        }
+      }
+    },
+    "Downloads on Apple TV live in the system cache, which tvOS may clear when it needs space.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I download su Apple TV stanno nella cache di sistema, che tvOS può svuotare se serve spazio."
+          }
+        }
+      }
+    },
+    "Dropped": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abbandonato"
+          }
+        }
+      }
+    },
+    "Each profile has its own watch history and its own AniList or MyAnimeList list. The library is shared. A passcode keeps others from entering this profile.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ogni profilo ha la sua cronologia e la sua lista AniList o MyAnimeList. La libreria è condivisa. Un passcode impedisce agli altri di entrare in questo profilo."
+          }
+        }
+      }
+    },
+    "Each profile keeps its own list. Past 85% of an episode the server updates the list in use; progress never goes backwards and the last episode sets Completed. Titles and images always come from AniList. To connect a list, use the AnimeRoll app on iPhone.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ogni profilo ha la sua lista. Oltre l'85% di un episodio il server aggiorna la lista in uso; il progresso non torna mai indietro e l'ultimo episodio imposta Completato. Titoli e immagini arrivano sempre da AniList. Per collegare una lista usa l'app AnimeRoll su iPhone."
+          }
+        }
+      }
+    },
+    "Edit number": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifica numero"
+          }
+        }
+      }
+    },
+    "Edit number…": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifica numero…"
+          }
+        }
+      }
+    },
+    "Edit profile": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifica profilo"
+          }
+        }
+      }
+    },
+    "Enter": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entra"
+          }
+        }
+      }
+    },
+    "Episode %@ in %lld s": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Episodio %@ tra %lld s"
+          }
+        }
+      }
+    },
+    "Episode %@ ▸": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Episodio %@ ▸"
+          }
+        }
+      }
+    },
+    "Episodes": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Episodi"
+          }
+        }
+      }
+    },
+    "Episodes watched": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Episodi guardati"
+          }
+        }
+      }
+    },
+    "Explore": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esplora"
+          }
+        }
+      }
+    },
+    "Explore needs the new server version: update AnimeRoll on your server.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esplora richiede la nuova versione del server: aggiorna AnimeRoll sul server."
+          }
+        }
+      }
+    },
+    "Extras are not counted in AniList progress.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gli extra non contano per il progresso su AniList."
+          }
+        }
+      }
+    },
+    "Featured": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In evidenza"
+          }
+        }
+      }
+    },
+    "Find episodes": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trova episodi"
+          }
+        }
+      }
+    },
+    "From a title page choose Find episodes to download to the server": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dalla pagina di un titolo scegli Trova episodi per scaricare sul server"
+          }
+        }
+      }
+    },
+    "Home": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Home"
+          }
+        }
+      }
+    },
+    "How many jobs the server runs at once.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quanti lavori il server esegue insieme."
+          }
+        }
+      }
+    },
+    "ID AniList": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ID AniList"
+          }
+        }
+      }
+    },
+    "Import": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importa"
+          }
+        }
+      }
+    },
+    "Imported %lld episodes from _inbox": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importati %lld episodi da _inbox"
+          }
+        }
+      }
+    },
+    "Its watch history and passkeys are deleted. Anime it downloaded stay in the library. This cannot be undone.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La sua cronologia e le sue passkey vengono eliminate. Gli anime che ha scaricato restano nella libreria. L'azione non si può annullare."
+          }
+        }
+      }
+    },
+    "Library": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Libreria"
+          }
+        }
+      }
+    },
+    "Library %@": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Libreria %@"
+          }
+        }
+      }
+    },
+    "Link the series to the right AniList entry: title, images and episodes are re-read from there.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collega la serie alla voce AniList giusta: titolo, immagini ed episodi vengono riletti da lì."
+          }
+        }
+      }
+    },
+    "List": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lista"
+          }
+        }
+      }
+    },
+    "List status": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stato su AniList"
+          }
+        }
+      }
+    },
+    "Lists": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liste"
+          }
+        }
+      }
+    },
+    "Locked with a passcode": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Protetto da passcode"
+          }
+        }
+      }
+    },
+    "Name": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nome"
+          }
+        }
+      }
+    },
+    "Never used": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mai usata"
+          }
+        }
+      }
+    },
+    "New passcode (4-12 characters)": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuovo passcode (4-12 caratteri)"
+          }
+        }
+      }
+    },
+    "New profile": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuovo profilo"
+          }
+        }
+      }
+    },
+    "No episodes on the server": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun episodio sul server"
+          }
+        }
+      }
+    },
+    "No passkeys": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessuna passkey"
+          }
+        }
+      }
+    },
+    "No results.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun risultato."
+          }
+        }
+      }
+    },
+    "No similar titles": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun titolo simile"
+          }
+        }
+      }
+    },
+    "None": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessuno"
+          }
+        }
+      }
+    },
+    "Not connected": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non collegato"
+          }
+        }
+      }
+    },
+    "Not on the server yet": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non ancora sul server"
+          }
+        }
+      }
+    },
+    "Not set up on the server": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non configurato sul server"
+          }
+        }
+      }
+    },
+    "Number": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Numero"
+          }
+        }
+      }
+    },
+    "OK": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        }
+      }
+    },
+    "Offline": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline"
+          }
+        }
+      }
+    },
+    "On server": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sul server"
+          }
+        }
+      }
+    },
+    "On this Apple TV": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Su questa Apple TV"
+          }
+        }
+      }
+    },
+    "On your server": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sul tuo server"
+          }
+        }
+      }
+    },
+    "Open to everyone using this server": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aperto a chiunque usi questo server"
+          }
+        }
+      }
+    },
+    "Passcode": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passcode"
+          }
+        }
+      }
+    },
+    "Passcode (optional, 4-12 characters)": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passcode (facoltativo, 4-12 caratteri)"
+          }
+        }
+      }
+    },
+    "Passcode updated": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passcode aggiornato"
+          }
+        }
+      }
+    },
+    "Passkey": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passkey"
+          }
+        }
+      }
+    },
+    "Password": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Password"
+          }
+        }
+      }
+    },
+    "Pause": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pausa"
+          }
+        }
+      }
+    },
+    "Pause all": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pausa tutto"
+          }
+        }
+      }
+    },
+    "Paused": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In pausa"
+          }
+        }
+      }
+    },
+    "Planned to watch": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pianificati da vedere"
+          }
+        }
+      }
+    },
+    "Planning": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pianificato"
+          }
+        }
+      }
+    },
+    "Priority %@": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Priorità %@"
+          }
+        }
+      }
+    },
+    "Profile": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profilo"
+          }
+        }
+      }
+    },
+    "Refresh info and images from AniList": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiorna info e immagini da AniList"
+          }
+        }
+      }
+    },
+    "Remove from Apple TV": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rimuovi da Apple TV"
+          }
+        }
+      }
+    },
+    "Remove passcode": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rimuovi passcode"
+          }
+        }
+      }
+    },
+    "Remove rating": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rimuovi voto"
+          }
+        }
+      }
+    },
+    "Repair on server": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ripara sul server"
+          }
+        }
+      }
+    },
+    "Reserve %@": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riserva %@"
+          }
+        }
+      }
+    },
+    "Resume": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riprendi"
+          }
+        }
+      }
+    },
+    "Resume E%@": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riprendi E%@"
+          }
+        }
+      }
+    },
+    "Resume all": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riprendi tutto"
+          }
+        }
+      }
+    },
+    "Retry": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riprova"
+          }
+        }
+      }
+    },
+    "Rewatching": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rivisione"
+          }
+        }
+      }
+    },
+    "Roll": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Roll"
+          }
+        }
+      }
+    },
+    "Save": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salva"
+          }
+        }
+      }
+    },
+    "Save and refresh": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salva e aggiorna"
+          }
+        }
+      }
+    },
+    "Save as extra (EX)": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salva come extra (EX)"
+          }
+        }
+      }
+    },
+    "Save as regular episode": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salva come episodio normale"
+          }
+        }
+      }
+    },
+    "Search": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerca"
+          }
+        }
+      }
+    },
+    "Search the library and AniList": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerca nella libreria e su AniList"
+          }
+        }
+      }
+    },
+    "Seasons and related": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stagioni e correlati"
+          }
+        }
+      }
+    },
+    "Seasons from AniList": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stagioni da AniList"
+          }
+        }
+      }
+    },
+    "Sending…": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invio…"
+          }
+        }
+      }
+    },
+    "Sent %lld downloads to the server": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inviati %lld download al server"
+          }
+        }
+      }
+    },
+    "Server": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server"
+          }
+        }
+      }
+    },
+    "Server address (https://…)": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indirizzo del server (https://…)"
+          }
+        }
+      }
+    },
+    "Server downloads": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download sul server"
+          }
+        }
+      }
+    },
+    "Server storage": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spazio sul server"
+          }
+        }
+      }
+    },
+    "Set a passcode": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imposta un passcode"
+          }
+        }
+      }
+    },
+    "Sign in": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accedi"
+          }
+        }
+      }
+    },
+    "Sign in with passkey (iPhone)": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accedi con passkey (iPhone)"
+          }
+        }
+      }
+    },
+    "Sign out": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esci"
+          }
+        }
+      }
+    },
+    "Similar": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Simili"
+          }
+        }
+      }
+    },
+    "Simultaneous downloads": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download contemporanei"
+          }
+        }
+      }
+    },
+    "Start": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avvia"
+          }
+        }
+      }
+    },
+    "Start now": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avvia subito"
+          }
+        }
+      }
+    },
+    "Status": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stato"
+          }
+        }
+      }
+    },
+    "Switch profile": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambia profilo"
+          }
+        }
+      }
+    },
+    "The file and subtitles are deleted from the server, freeing space.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il file e i sottotitoli vengono cancellati dal server e liberano spazio."
+          }
+        }
+      }
+    },
+    "The passcode is asked when someone switches to this profile from another one. It does not replace the password or passkey used to sign in to the server.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il passcode viene chiesto quando qualcuno passa a questo profilo da un altro. Non sostituisce la password o la passkey con cui si accede al server."
+          }
+        }
+      }
+    },
+    "This season": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questa stagione"
+          }
+        }
+      }
+    },
+    "Trending": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Di tendenza"
+          }
+        }
+      }
+    },
+    "Update subtitles only (ASS)": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiorna solo i sottotitoli (ASS)"
+          }
+        }
+      }
+    },
+    "Use this list": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usa questa lista"
+          }
+        }
+      }
+    },
+    "User": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utente"
+          }
+        }
+      }
+    },
+    "Username": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nome utente"
+          }
+        }
+      }
+    },
+    "Watch": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guarda"
+          }
+        }
+      }
+    },
+    "Watch E%@": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guarda E%@"
+          }
+        }
+      }
+    },
+    "Watch offline downloads": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guarda i download offline"
+          }
+        }
+      }
+    },
+    "Watched %lld/%@ · %@": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardati %lld/%@ · %@"
+          }
+        }
+      }
+    },
+    "Watching": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In corso"
+          }
+        }
+      }
+    },
+    "Watching on your list": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stai guardando su AniList"
+          }
+        }
+      }
+    },
+    "Who's watching?": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chi sta guardando?"
+          }
+        }
+      }
+    },
+    "You'll find them in the Downloads queue.": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Li trovi nella coda in Download."
+          }
+        }
+      }
+    },
+    "Your anime catalog on your server": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il tuo catalogo anime sul server"
+          }
+        }
+      }
+    },
+    "Your rating": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il tuo voto"
+          }
+        }
+      }
+    },
+    "in use": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in uso"
+          }
+        }
+      }
+    },
+    "of %@": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "su %@"
+          }
+        }
+      }
+    },
+    "of %lld": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "su %lld"
+          }
+        }
+      }
+    },
+    "← Results": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "← Risultati"
+          }
+        }
+      }
+    },
+    "✓ List": {
+      "localizations": {
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✓ Lista"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

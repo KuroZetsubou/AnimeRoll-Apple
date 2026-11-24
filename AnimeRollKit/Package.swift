@@ -5,8 +5,8 @@ import PackageDescription
 /// AniList, offline downloads and playback progress.
 let package = Package(
     name: "AnimeRollKit",
-    defaultLocalization: "it",
-    platforms: [.iOS(.v18), .tvOS(.v18)],
+    defaultLocalization: "en",
+    platforms: [.iOS(.v18), .tvOS(.v18), .macOS(.v14)],
     products: [.library(name: "AnimeRollKit", targets: ["AnimeRollKit"])],
     targets: [
         // libass (ASS/SSA renderer, MPVKit's static builds) and what it links against.

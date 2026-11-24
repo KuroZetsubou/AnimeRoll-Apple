@@ -1,9 +1,13 @@
 import AuthenticationServices
 import Foundation
+#if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 /// WebAuthn passkeys with the system UI (Face ID / Touch ID / iCloud Keychain).
-/// Requires the Associated Domains entitlement `webcredentials:<NAS domain>` and the
+/// Requires the Associated Domains entitlement `webcredentials:<server domain>` and the
 /// server serving /.well-known/apple-app-site-association over HTTPS.
 @MainActor
 public final class PasskeyAuthenticator: NSObject {
@@ -21,7 +25,7 @@ public final class PasskeyAuthenticator: NSObject {
               let challenge = (options["challenge"] as? String).flatMap(Data.init(base64URL:)),
               let userId = (user["id"] as? String).flatMap(Data.init(base64URL:)),
               let userName = user["name"] as? String
-        else { throw APIError.http(500, "Opzioni passkey non valide") }
+        else { throw APIError.http(500, String(localized: "Invalid passkey options", bundle: .module)) }
 
         let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(relyingPartyIdentifier: rpId)
         let request = provider.createCredentialRegistrationRequest(challenge: challenge, name: userName, userID: userId)
@@ -29,7 +33,7 @@ public final class PasskeyAuthenticator: NSObject {
 
         guard let cred = auth.credential as? ASAuthorizationPlatformPublicKeyCredentialRegistration,
               let attestation = cred.rawAttestationObject
-        else { throw APIError.http(500, "Registrazione passkey annullata") }
+        else { throw APIError.http(500, String(localized: "Passkey registration cancelled", bundle: .module)) }
 
         let id = cred.credentialID.base64URLEncoded
         _ = try await api.rawPost("api/auth/passkeys/register/finish", json: [
@@ -55,7 +59,7 @@ public final class PasskeyAuthenticator: NSObject {
               let options = begin["options"] as? [String: Any],
               let challenge = (options["challenge"] as? String).flatMap(Data.init(base64URL:)),
               let rpId = options["rpId"] as? String ?? api.baseURL.host
-        else { throw APIError.http(500, "Opzioni passkey non valide") }
+        else { throw APIError.http(500, String(localized: "Invalid passkey options", bundle: .module)) }
 
         let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(relyingPartyIdentifier: rpId)
         let request = provider.createCredentialAssertionRequest(challenge: challenge)
@@ -65,7 +69,7 @@ public final class PasskeyAuthenticator: NSObject {
         }
         let auth = try await perform([request])
         guard let cred = auth.credential as? ASAuthorizationPlatformPublicKeyCredentialAssertion
-        else { throw APIError.http(500, "Accesso passkey annullato") }
+        else { throw APIError.http(500, String(localized: "Passkey sign-in cancelled", bundle: .module)) }
 
         let id = cred.credentialID.base64URLEncoded
         let json = try await api.rawPost("api/auth/passkeys/login/finish", json: [
@@ -107,8 +111,12 @@ extension PasskeyAuthenticator: ASAuthorizationControllerDelegate, ASAuthorizati
 
     public nonisolated func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
         MainActor.assumeIsolated {
+            #if canImport(UIKit)
             let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
             return scenes.flatMap(\.windows).first(where: \.isKeyWindow) ?? ASPresentationAnchor()
+            #else
+            return NSApplication.shared.keyWindow ?? NSApplication.shared.windows.first ?? ASPresentationAnchor()
+            #endif
         }
     }
 }

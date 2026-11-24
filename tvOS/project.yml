@@ -1,12 +1,14 @@
 # Generate the Xcode project with:  xcodegen generate
 name: AnimeRollTV
 options:
+  developmentLanguage: en
   xcodeVersion: "27.2"   # built with Xcode 27.2 (iOS/tvOS 27.2 SDK); deployment target stays 18.0
   bundleIdPrefix: com.kurozetsubou.animeroll
   deploymentTarget:
     tvOS: "18.0"
 settings:
   base:
+    SWIFT_EMIT_LOC_STRINGS: YES
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
@@ -25,7 +27,7 @@ targets:
       path: AnimeRollTV/AnimeRollTV.entitlements
       # No capabilities by default, so any Apple account can sign it (free "Personal Team" included).
       # Passkeys need a paid developer account: add, under `properties:`,
-      #   com.apple.developer.associated-domains: ["webcredentials:YOUR-NAS-DOMAIN"]
+      #   com.apple.developer.associated-domains: ["webcredentials:YOUR-SERVER-DOMAIN"]
       # then run `xcodegen generate` again. See README.
       properties:
         com.apple.developer.associated-domains: ["webcredentials:anime.example.com"]
@@ -42,4 +44,4 @@ targets:
         UIBackgroundModes: [audio]
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
-        NSLocalNetworkUsageDescription: "AnimeRoll si collega al tuo NAS sulla rete locale."
+        NSLocalNetworkUsageDescription: "AnimeRoll connects to your server on the local network."

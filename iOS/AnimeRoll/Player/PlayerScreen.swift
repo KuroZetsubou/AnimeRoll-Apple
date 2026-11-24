@@ -120,7 +120,7 @@ private struct PlayerScreenContent: View {
                     Button { withAnimation(DS.base) { showEpisodes.toggle() } } label: {
                         Image(systemName: "sidebar.right").font(.headline).frame(width: 44, height: 44).glassCircle()
                     }
-                    .buttonStyle(.plain).padding(.top, 70).padding(.trailing, 20).accessibilityLabel("Episodi")
+                    .buttonStyle(.plain).padding(.top, 70).padding(.trailing, 20).accessibilityLabel("Episodes")
                 }
             }
             if wide, showEpisodes, let model, isEpisode {
@@ -136,7 +136,7 @@ private struct PlayerScreenContent: View {
             Image(systemName: expand ? "arrow.up.left.and.arrow.down.right" : "arrow.down.right.and.arrow.up.left")
                 .font(.headline).frame(width: 44, height: 44).glassCircle()
         }
-        .buttonStyle(.plain).accessibilityLabel(expand ? "Schermo intero" : "Esci dallo schermo intero")
+        .buttonStyle(.plain).accessibilityLabel(expand ? String(localized: "Full screen") : String(localized: "Exit full screen"))
     }
 
     private var closeButton: some View {
@@ -171,12 +171,12 @@ private struct TabletopControls: View {
                     Button { Haptics.tick(); expand() } label: {
                         Image(systemName: "arrow.up.left.and.arrow.down.right").font(.headline).frame(width: 44, height: 44).background(DS.surface, in: .circle)
                     }
-                    .buttonStyle(.plain).accessibilityLabel("Schermo intero")
+                    .buttonStyle(.plain).accessibilityLabel("Full screen")
                 }
                 Button(action: close) {
                     Image(systemName: "xmark").font(.headline).frame(width: 44, height: 44).background(DS.surface, in: .circle)
                 }
-                .buttonStyle(.plain).accessibilityLabel("Chiudi")
+                .buttonStyle(.plain).accessibilityLabel("Close")
             }
             .padding(.top, 32)
 
@@ -187,7 +187,7 @@ private struct TabletopControls: View {
                 Button { Haptics.tick(); model.skip(seconds: -10) } label: {
                     Image(systemName: "gobackward.10").font(.title.weight(.semibold)).frame(width: 68, height: 68).glassCircle()
                 }
-                .buttonStyle(.plain).accessibilityLabel("Indietro 10 secondi")
+                .buttonStyle(.plain).accessibilityLabel("Back 10 seconds")
                 Button { Haptics.tick(); model.togglePlayPause() } label: {
                     TimelineView(.periodic(from: .now, by: 0.3)) { _ in
                         Image(systemName: model.player.rate == 0 ? "play.fill" : "pause.fill").font(.system(size: 38, weight: .bold))
@@ -195,11 +195,11 @@ private struct TabletopControls: View {
                             .background(DS.accent, in: .circle).shadow(color: DS.accent.opacity(0.45), radius: 26)
                     }
                 }
-                .buttonStyle(.plain).accessibilityLabel("Riproduci o pausa")
+                .buttonStyle(.plain).accessibilityLabel("Play or pause")
                 Button { Haptics.tick(); model.skip(seconds: 10) } label: {
                     Image(systemName: "goforward.10").font(.title.weight(.semibold)).frame(width: 68, height: 68).glassCircle()
                 }
-                .buttonStyle(.plain).accessibilityLabel("Avanti 10 secondi")
+                .buttonStyle(.plain).accessibilityLabel("Forward 10 seconds")
             }
             .foregroundStyle(.white)
 
@@ -223,11 +223,11 @@ private struct TabletopControls: View {
 
             // Quick actions.
             HStack(spacing: 12) {
-                Button { Haptics.tick(); model.skip(seconds: 85) } label: { Label("Salta sigla", systemImage: "forward.fill") }
+                Button { Haptics.tick(); model.skip(seconds: 85) } label: { Label("Skip intro", systemImage: "forward.fill") }
                     .buttonStyle(GhostButtonStyle())
                 Spacer()
                 if showEpisodes, let next = model.nextEpisode {
-                    Button { Task { await model.playNext() } } label: { Label("Episodio \(next.numberLabel)", systemImage: "forward.end.fill") }
+                    Button { Task { await model.playNext() } } label: { Label("Episode \(next.numberLabel)", systemImage: "forward.end.fill") }
                         .buttonStyle(PrimaryButtonStyle(small: true))
                 }
             }
@@ -249,7 +249,7 @@ private struct TabletopControls: View {
 struct InlinePlayer: View {
     let item: PlaybackItem
     let close: () -> Void
-    /// "Schermo intero": stops this player and reopens the episode full screen, ignoring the fold.
+    /// "Full screen": stops this player and reopens the episode full screen, ignoring the fold.
     var expand: (() -> Void)? = nil
     @Environment(AppSession.self) private var session
     @State private var model: PlayerModel?
@@ -269,7 +269,7 @@ struct InlinePlayer: View {
                     Button { Task { await model?.stop(); expand() } } label: {
                         Image(systemName: "arrow.up.left.and.arrow.down.right").padding(8).background(.ultraThinMaterial, in: .circle)
                     }
-                    .accessibilityLabel("Schermo intero")
+                    .accessibilityLabel("Full screen")
                 }
                 Button { Task { await model?.stop(); close() } } label: {
                     Image(systemName: "xmark").padding(8).background(.ultraThinMaterial, in: .circle)
@@ -309,11 +309,11 @@ private struct NextUpOverlay: View {
             VStack { Spacer(); HStack { Spacer()
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Prossimo episodio tra \(left) s").font(DS.body(12)).foregroundStyle(DS.textSecondary)
+                        Text("Next episode in \(left) s").font(DS.body(12)).foregroundStyle(DS.textSecondary)
                         Text("E\(next.numberLabel)\(next.title.map { " · \($0)" } ?? "")").font(DS.body(14, 700)).lineLimit(1)
                     }
-                    Button("Annulla") { model.cancelAutoNext() }.buttonStyle(PrimaryButtonStyle(prominent: false, small: true))
-                    Button("Avvia") { Task { await model.playNext() } }.buttonStyle(PrimaryButtonStyle(small: true))
+                    Button("Cancel") { model.cancelAutoNext() }.buttonStyle(PrimaryButtonStyle(prominent: false, small: true))
+                    Button("Start") { Task { await model.playNext() } }.buttonStyle(PrimaryButtonStyle(small: true))
                 }
                 .padding(14).glassRect()
                 .padding(.trailing, 24).padding(.bottom, 90)
@@ -321,7 +321,7 @@ private struct NextUpOverlay: View {
         } else if !countdownOnly, model.showNextUp, let next = model.nextEpisode {
             VStack { Spacer(); HStack { Spacer()
                 Button { Task { await model.playNext() } } label: {
-                    Label("Episodio \(next.numberLabel)", systemImage: "forward.end.fill").padding(.horizontal, 6)
+                    Label("Episode \(next.numberLabel)", systemImage: "forward.end.fill").padding(.horizontal, 6)
                 }
                 .buttonStyle(PrimaryButtonStyle(small: true))
                 .padding(.trailing, 24).padding(.bottom, 90)
@@ -345,7 +345,7 @@ private struct EpisodePanel: View {
                     Button { Task { await model.play(ep) } } label: {
                         HStack {
                             Text("E\(ep.numberLabel)").font(.subheadline.monospacedDigit().bold()).frame(width: 44, alignment: .leading)
-                            Text(ep.title ?? "Episodio").lineLimit(1)
+                            Text(ep.title ?? "Episode").lineLimit(1)
                             Spacer()
                             if ep.id == model.currentEpisode?.id { Image(systemName: "speaker.wave.2.fill").foregroundStyle(DS.accent) }
                             else if ep.completed { Image(systemName: "checkmark").foregroundStyle(.secondary) }

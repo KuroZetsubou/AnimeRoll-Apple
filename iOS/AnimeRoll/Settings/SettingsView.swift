@@ -2,7 +2,7 @@ import AuthenticationServices
 import AnimeRollKit
 import SwiftUI
 
-/// Profilo: account, AniList, passkeys, NAS queue, Telegram sources, logout.
+/// Profilo: account, AniList, passkeys, server queue, Telegram sources, logout.
 struct SettingsView: View {
     @Environment(AppSession.self) private var session
     @Environment(\.webAuthenticationSession) private var webAuth
@@ -16,49 +16,78 @@ struct SettingsView: View {
     @AppStorage(PlayerModel.audioLanguageKey) private var audioLanguage = ""
     @AppStorage(PlayerModel.autoNextKey) private var autoNext = PlayerModel.autoNextDefault
     @State private var channels: [TelegramChannel] = []
+    @State private var tracker: TrackerInfo?
+    @State private var profileCount = 1
+    @State private var confirmDelete = false
+    @State private var sheet: ProfileSheet?
+
+    private enum ProfileSheet: String, Identifiable { case editProfile, passcode; var id: String { rawValue } }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                ScreenTitle("Profilo")
+                ScreenTitle("Profile")
                 if let user = session.user {
                     group("Account") {
-                        row("person", "Utente", value: user.username)
+                        row("person", "User", value: user.username)
                         row("server.rack", "Server", value: session.api.baseURL.host() ?? "")
                     }
-                    group("AniList", note: "Oltre l'85% di un episodio il server aggiorna AniList. Il progresso non torna mai indietro e l'ultimo episodio imposta Completato.") {
-                        row("link", user.aniListConnected ? "Collegato come \(user.aniListUserName ?? "AniList")" : "Non collegato")
-                        Group {
-                            if user.aniListConnected {
-                                Button("Scollega") { Task { try? await session.api.aniListDisconnect(); await session.refreshUser() } }
-                                    .buttonStyle(PrimaryButtonStyle(prominent: false, small: true))
-                            } else {
-                                Button("Collega AniList") { Task { await connectAniList() } }.buttonStyle(PrimaryButtonStyle(small: true))
+                    group("Profile") {
+                        HStack(spacing: 14) {
+                            AvatarView(name: user.username, index: user.avatar, size: 44)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(user.username).font(DS.body(15, 600))
+                                Text(user.hasPasscode ? "Locked with a passcode" : "Open to everyone using this server")
+                                    .font(DS.body(12)).foregroundStyle(DS.textTertiary)
                             }
+                            Spacer()
+                            Button { sheet = .editProfile } label: {
+                                Image(systemName: "pencil").foregroundStyle(DS.textSecondary).frame(width: 44, height: 44)
+                            }
+                            .buttonStyle(.plain).accessibilityLabel("Edit profile")
                         }
-                        .padding(.horizontal, 16).padding(.bottom, 14)
+                        .padding(.leading, 16).padding(.trailing, 6).frame(minHeight: 64)
+                        action("lock", user.hasPasscode ? "Change or remove passcode" : "Set a passcode") { sheet = .passcode }
+                        action("person.2", "Switch profile") { session.showProfilePicker = true }
+                        if profileCount > 1 {
+                            Button { confirmDelete = true } label: {
+                                HStack(spacing: 14) {
+                                    Image(systemName: "trash").frame(width: 24)
+                                    Text("Delete this profile").font(DS.body(15, 500))
+                                    Spacer()
+                                }
+                                .foregroundStyle(DS.pink).padding(.horizontal, 16).frame(minHeight: 52).contentShape(.rect)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                    group("Riproduzione", note: "Finito un episodio, parte il successivo dopo questo tempo. Il doppiaggio predefinito vale quando l'episodio ha più tracce audio; scegliendone un'altra nel player diventa il nuovo predefinito.") {
+                    group("Lists", note: "Each profile keeps its own list. Past 85% of an episode the server updates the list in use; progress never goes backwards and the last episode sets Completed. Titles and images always come from AniList.") {
+                        if let tracker {
+                            trackerRows(id: "anilist", name: "AniList", account: tracker.aniList, active: tracker.active == "anilist")
+                            trackerRows(id: "mal", name: "MyAnimeList", account: tracker.mal, active: tracker.active == "mal")
+                        } else { ProgressView().padding(16) }
+                    }
+                    group("Playback", note: "When an episode ends the next one starts after this time. The default dub applies when an episode has several audio tracks; choosing another in the player makes it the new default.") {
                         HStack(spacing: 14) {
                             Image(systemName: "waveform").foregroundStyle(DS.textSecondary).frame(width: 24)
-                            Text("Doppiaggio").font(DS.body(15, 500))
+                            Text("Dub").font(DS.body(15, 500))
                             Spacer()
-                            Picker("Doppiaggio", selection: $audioLanguage) {
-                                Text("Prima traccia").tag("")
-                                Text("Giapponese").tag("ja")
-                                Text("Italiano").tag("it")
-                                Text("Inglese").tag("en")
+                            Picker("Dub", selection: $audioLanguage) {
+                                Text("First track").tag("")
+                                Text("Japanese").tag("ja")
+                                Text("Italian").tag("it")
+                                Text("English").tag("en")
                             }
                             .tint(DS.accent)
                         }
                         .padding(.horizontal, 16).frame(minHeight: 52)
                         HStack(spacing: 14) {
                             Image(systemName: "forward.end").foregroundStyle(DS.textSecondary).frame(width: 24)
-                            Text("Episodio successivo").font(DS.body(15, 500))
+                            Text("Next episode").font(DS.body(15, 500))
                             Spacer()
-                            Picker("Episodio successivo", selection: $autoNext) {
-                                Text("Spento").tag(0)
-                                ForEach([3, 5, 10, 15], id: \.self) { Text("\($0) secondi").tag($0) }
+                            Picker("Next episode", selection: $autoNext) {
+                                Text("Off").tag(0)
+                                ForEach([3, 5, 10, 15], id: \.self) { Text("\($0) seconds").tag($0) }
                             }
                             .tint(DS.accent)
                         }
@@ -70,28 +99,28 @@ struct SettingsView: View {
                                 Image(systemName: "key").foregroundStyle(DS.textSecondary).frame(width: 24)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(p.name).font(DS.body(15, 500))
-                                    Text(p.lastUsedAt.map { "Ultimo uso: \($0.formatted(date: .abbreviated, time: .omitted))" } ?? "Mai usata")
+                                    Text(p.lastUsedAt.map { String(localized: "Last used: \($0.formatted(date: .abbreviated, time: .omitted))") } ?? String(localized: "Never used"))
                                         .font(DS.body(12)).foregroundStyle(DS.textTertiary)
                                 }
                                 Spacer()
                                 Button { Task { try? await session.api.deletePasskey(p.id); await loadPasskeys() } } label: {
                                     Image(systemName: "trash").foregroundStyle(DS.textSecondary).frame(width: 44, height: 44)
                                 }
-                                .buttonStyle(.plain).accessibilityLabel("Elimina \(p.name)")
+                                .buttonStyle(.plain).accessibilityLabel("Delete \(p.name)")
                             }
                             .padding(.leading, 16).padding(.trailing, 6).frame(minHeight: 56)
                         }
-                        action("plus", "Aggiungi passkey") {
-                            do { try await session.registerPasskey(name: UIDevice.current.name); await loadPasskeys(); message = "Passkey creata" }
+                        action("plus", "Add passkey") {
+                            do { try await session.registerPasskey(name: UIDevice.current.name); await loadPasskeys(); message = String(localized: "Passkey created") }
                             catch { message = error.localizedDescription }
                         }
                     }
-                    group("Spazio sul NAS", note: "Sotto la riserva il NAS rifiuta nuovi download e import. Per liberare spazio elimina episodi o serie dalla pagina del titolo.") {
+                    group("Server storage", note: "Below the reserve the server refuses new downloads and imports. To free space, delete episodes or series from the title page.") {
                         if let storage { storageCard(storage) } else { ProgressView().padding(16) }
                     }
-                    group("Download sul NAS", note: "Quanti lavori il NAS esegue insieme. Gli altri aspettano in coda in ordine di priorità.") {
+                    group("Server downloads", note: "How many jobs the server runs at once. The others wait in the queue by priority.") {
                         HStack {
-                            Text("Download contemporanei").font(DS.body(15, 500))
+                            Text("Simultaneous downloads").font(DS.body(15, 500))
                             Spacer()
                             if let queue {
                                 Stepper(value: Binding(get: { queue.maxConcurrentDownloads },
@@ -104,13 +133,13 @@ struct SettingsView: View {
                         }
                         .padding(.horizontal, 16).frame(minHeight: 56)
                     }
-                    group("Fonti · Telegram") { telegram }
+                    group("Sources · Telegram") { telegram }
                     if let message { Text(message).font(DS.body(13)).foregroundStyle(DS.accent).padding(.top, 16) }
                     group(nil) {
                         Button { session.logout() } label: {
                             HStack(spacing: 14) {
                                 Image(systemName: "rectangle.portrait.and.arrow.right").frame(width: 24)
-                                Text("Esci").font(DS.body(15, 500))
+                                Text("Sign out").font(DS.body(15, 500))
                                 Spacer()
                             }
                             .foregroundStyle(DS.pink).padding(.horizontal, 16).frame(minHeight: 52).contentShape(.rect)
@@ -124,7 +153,24 @@ struct SettingsView: View {
         }
         .background(Theme.background)
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(item: $sheet) { which in
+            if let user = session.user {
+                switch which {
+                case .editProfile: ProfileFormSheet(mode: .edit(user)) {}
+                case .passcode: PasscodeSheet(user: user) { message = String(localized: "Passcode updated") }
+                }
+            }
+        }
+        .confirmationDialog("Delete this profile?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete profile", role: .destructive) {
+                Task {
+                    guard let id = session.user?.id else { return }
+                    do { try await session.api.deleteProfile(id); session.logout() } catch { message = error.localizedDescription }
+                }
+            }
+        } message: { Text("Its watch history and passkeys are deleted. Anime it downloaded stay in the library. This cannot be undone.") }
         .task {
+            await loadTracker()
             await loadPasskeys()
             queue = try? await session.api.queueSettings()
             storage = try? await session.api.storageInfo()
@@ -139,9 +185,9 @@ struct SettingsView: View {
         let low = s.freeBytes < s.reserveBytes * 2
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("\(s.freeBytes.fileSize) liberi").font(DS.display(20, 700)).foregroundStyle(low ? DS.pink : .white)
+                Text("\(s.freeBytes.fileSize) free").font(DS.display(20, 700)).foregroundStyle(low ? DS.pink : .white)
                 Spacer()
-                Text("su \(s.totalBytes.fileSize)").font(DS.body(14)).foregroundStyle(DS.textTertiary)
+                Text("of \(s.totalBytes.fileSize)").font(DS.body(14)).foregroundStyle(DS.textTertiary)
             }
             GeometryReader { g in
                 ZStack(alignment: .leading) {
@@ -151,9 +197,9 @@ struct SettingsView: View {
             }
             .frame(height: 6)
             HStack {
-                Label("Libreria \(s.libraryBytes.fileSize)", systemImage: "film.stack").font(DS.body(13)).foregroundStyle(DS.textSecondary)
+                Label("Library \(s.libraryBytes.fileSize)", systemImage: "film.stack").font(DS.body(13)).foregroundStyle(DS.textSecondary)
                 Spacer()
-                Text("Riserva \(s.reserveBytes.fileSize)").font(DS.body(13)).foregroundStyle(DS.textTertiary)
+                Text("Reserve \(s.reserveBytes.fileSize)").font(DS.body(13)).foregroundStyle(DS.textTertiary)
             }
         }
         .padding(16)
@@ -164,17 +210,17 @@ struct SettingsView: View {
     @ViewBuilder private var telegram: some View {
         if let tg {
             if !tg.configured {
-                Text("Configura ApiId, ApiHash e numero nel file .env del server.").font(DS.body(14)).foregroundStyle(DS.textSecondary).padding(16)
+                Text("Set ApiId, ApiHash and phone number in the server's .env file.").font(DS.body(14)).foregroundStyle(DS.textSecondary).padding(16)
             } else if !tg.loggedIn {
                 VStack(alignment: .leading, spacing: 10) {
                     if let tgNext {
-                        SecureField(tgNext == "password" ? "Password 2FA" : "Codice ricevuto su Telegram", text: $code)
+                        SecureField(tgNext == "password" ? "2FA password" : "Code received on Telegram", text: $code)
                             .font(DS.body(16)).padding(.horizontal, 14).frame(height: 48)
                             .background(DS.surfaceRaised, in: .rect(cornerRadius: DS.rCard))
-                        Button("Verifica") { Task { await telegramLogin(code) } }.buttonStyle(PrimaryButtonStyle(small: true))
+                        Button("Verify") { Task { await telegramLogin(code) } }.buttonStyle(PrimaryButtonStyle(small: true))
                     } else {
-                        Text("Collega il tuo account per cercare episodi nei canali.").font(DS.body(14)).foregroundStyle(DS.textSecondary)
-                        Button("Invia codice") { Task { await telegramLogin(nil) } }.buttonStyle(PrimaryButtonStyle(small: true))
+                        Text("Connect your account to search for episodes in channels.").font(DS.body(14)).foregroundStyle(DS.textSecondary)
+                        Button("Send code") { Task { await telegramLogin(nil) } }.buttonStyle(PrimaryButtonStyle(small: true))
                     }
                 }
                 .padding(16)
@@ -183,10 +229,10 @@ struct SettingsView: View {
                     Toggle(isOn: $c.enabled) { Text(c.title).font(DS.body(15, 500)) }
                         .tint(DS.accent).padding(.horizontal, 16).frame(minHeight: 52)
                 }
-                if channels.isEmpty { Text("Nessun canale trovato.").font(DS.body(14)).foregroundStyle(DS.textSecondary).padding(16) }
-                Button("Salva") {
+                if channels.isEmpty { Text("No channels found.").font(DS.body(14)).foregroundStyle(DS.textSecondary).padding(16) }
+                Button("Save") {
                     Task {
-                        do { try await session.api.saveTelegramChannels(channels); message = "Canali salvati" }
+                        do { try await session.api.saveTelegramChannels(channels); message = String(localized: "Channels saved") }
                         catch { message = error.localizedDescription }
                     }
                 }
@@ -209,10 +255,10 @@ struct SettingsView: View {
 
     // MARK: Pieces
 
-    private func group(_ title: String?, note: String? = nil, @ViewBuilder content: () -> some View) -> some View {
+    private func group(_ title: LocalizedStringKey?, note: LocalizedStringKey? = nil, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             if let title {
-                Text(title.uppercased()).font(DS.body(12, 700)).tracking(1).foregroundStyle(DS.textTertiary).padding(.leading, 4)
+                Text(title).textCase(.uppercase).font(DS.body(12, 700)).tracking(1).foregroundStyle(DS.textTertiary).padding(.leading, 4)
             }
             VStack(alignment: .leading, spacing: 0) { content() }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -222,7 +268,7 @@ struct SettingsView: View {
         .padding(.top, 24)
     }
 
-    private func row(_ icon: String, _ label: String, value: String? = nil) -> some View {
+    private func row(_ icon: String, _ label: LocalizedStringKey, value: String? = nil) -> some View {
         HStack(spacing: 14) {
             Image(systemName: icon).foregroundStyle(DS.textSecondary).frame(width: 24)
             Text(label).font(DS.body(15, 500))
@@ -232,7 +278,7 @@ struct SettingsView: View {
         .padding(.horizontal, 16).frame(minHeight: 52)
     }
 
-    private func action(_ icon: String, _ label: String, _ work: @escaping () async -> Void) -> some View {
+    private func action(_ icon: String, _ label: LocalizedStringKey, _ work: @escaping () async -> Void) -> some View {
         Button { Task { await work() } } label: {
             HStack(spacing: 14) {
                 Image(systemName: icon).foregroundStyle(DS.textSecondary).frame(width: 24)
@@ -247,12 +293,48 @@ struct SettingsView: View {
 
     private func loadPasskeys() async { passkeys = (try? await session.api.passkeys()) ?? [] }
 
-    private func connectAniList() async {
+    private func loadTracker() async {
+        tracker = try? await session.api.tracker()
+        profileCount = (try? await session.api.profiles().count) ?? 1
+    }
+
+    @ViewBuilder private func trackerRows(id: String, name: String, account: TrackerAccount, active: Bool) -> some View {
+        row("link", LocalizedStringKey(name), value: account.connected
+            ? (active ? "\(account.userName ?? "") · \(String(localized: "in use"))" : account.userName ?? "")
+            : account.configured ? String(localized: "Not connected") : String(localized: "Not set up on the server"))
+        if account.connected || account.configured {
+            HStack(spacing: 8) {
+                if account.connected {
+                    if !active {
+                        Button("Use this list") { Task { try? await session.api.setActiveTracker(id); await refreshTracker() } }
+                            .buttonStyle(PrimaryButtonStyle(small: true))
+                    }
+                    Button("Disconnect") {
+                        Task {
+                            if id == "anilist" { try? await session.api.aniListDisconnect() } else { try? await session.api.malDisconnect() }
+                            await refreshTracker()
+                        }
+                    }
+                    .buttonStyle(PrimaryButtonStyle(prominent: false, small: true))
+                } else {
+                    Button("Connect \(name)") { Task { await connect(id: id, name: name) } }.buttonStyle(PrimaryButtonStyle(small: true))
+                }
+            }
+            .padding(.horizontal, 16).padding(.bottom, 14)
+        }
+    }
+
+    private func refreshTracker() async {
+        await loadTracker()
+        await session.refreshUser()
+    }
+
+    private func connect(id: String, name: String) async {
         do {
-            let url = try await session.api.aniListConnectURL()
+            let url = id == "anilist" ? try await session.api.aniListConnectURL() : try await session.api.malConnectURL()
             _ = try await webAuth.authenticate(using: url, callbackURLScheme: "animeroll", preferredBrowserSession: .shared)
-            await session.refreshUser()
-            message = "AniList collegato"
+            await refreshTracker()
+            message = String(localized: "\(name) connected")
         } catch { message = error.localizedDescription }
     }
 }

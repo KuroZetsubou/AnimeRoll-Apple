@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// An episode saved on this device (downloaded from the NAS).
+/// An episode saved on this device (downloaded from the server).
 public struct OfflineEpisode: Codable, Hashable, Identifiable, Sendable {
     public let episode: EpisodeDTO
     public let series: SeriesDTO
@@ -9,7 +9,7 @@ public struct OfflineEpisode: Codable, Hashable, Identifiable, Sendable {
     public var id: Int { episode.id }
 }
 
-/// Downloads episodes from the NAS to the device with a background URLSession,
+/// Downloads episodes from the server to the device with a background URLSession,
 /// so they continue while the app is closed (iOS). On tvOS the system may purge
 /// the Caches folder when space is low, so downloads there are best-effort.
 @MainActor
@@ -55,13 +55,13 @@ public final class OfflineDownloads: NSObject {
         #endif
     }
 
-    /// "Frieren/Frieren - Episodio 3.mp4": readable in the Files app, one folder per series.
+    /// "Frieren/Frieren - Episode 3.mp4": readable in the Files app, one folder per series.
     nonisolated static func videoPath(episode: EpisodeDTO, series: SeriesDTO) -> String {
         let bad = CharacterSet(charactersIn: "/\\:?%*|\"<>").union(.newlines)
         let title = series.title.components(separatedBy: bad).joined(separator: " ")
             .trimmingCharacters(in: .whitespaces.union(CharacterSet(charactersIn: ".")))
-        let dir = title.isEmpty ? "Serie \(series.id)" : title
-        return "\(dir)/\(dir) - Episodio \(episode.numberLabel).mp4"
+        let dir = title.isEmpty ? String(localized: "Series \(series.id)", bundle: .module) : title
+        return "\(dir)/\(dir) - Episode \(episode.numberLabel).mp4"
     }
 
     override private init() {
@@ -142,7 +142,7 @@ public final class OfflineDownloads: NSObject {
         }
     }
 
-    /// Episodes saved before subtitles were kept (or whose subtitle download failed): fetch them now, while the NAS is reachable.
+    /// Episodes saved before subtitles were kept (or whose subtitle download failed): fetch them now, while the server is reachable.
     public func backfillSubtitles(for episodeId: Int, api: APIClient) async -> [SubtitleInfo] {
         guard isDownloaded(episodeId), localSubtitles(for: episodeId).isEmpty,
               let info = try? await api.stream(episodeId: episodeId), let tracks = info.subtitles, !tracks.isEmpty else { return [] }
@@ -204,11 +204,11 @@ extension OfflineDownloads: URLSessionDownloadDelegate {
     public nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         // Must move the file before returning.
         guard let meta = downloadTask.taskDescription.flatMap(PendingMeta.decode) else { return }
-        // An error page (expired link, file missing on the NAS) must not be saved as the video.
+        // An error page (expired link, file missing on the server) must not be saved as the video.
         if let http = downloadTask.response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             MainActor.assumeIsolated {
                 inFlight[meta.episode.id] = nil
-                lastError = "Il NAS ha risposto con l'errore \(http.statusCode). Riprova più tardi."
+                lastError = String(localized: "The server answered with error \(http.statusCode). Try again later.", bundle: .module)
             }
             return
         }

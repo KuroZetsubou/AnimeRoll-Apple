@@ -9,9 +9,9 @@ struct SubtitleMenu: View {
 
     var body: some View {
         Menu {
-            Section("Sottotitoli") {
+            Section("Subtitles") {
                 Button { controller.select(nil) } label: {
-                    if controller.selected == nil { Label("Disattivati", systemImage: "checkmark") } else { Text("Disattivati") }
+                    if controller.selected == nil { Label("Off", systemImage: "checkmark") } else { Text("Off") }
                 }
                 ForEach(controller.tracks) { track in
                     Button { controller.select(track) } label: {
@@ -20,11 +20,11 @@ struct SubtitleMenu: View {
                 }
             }
             if controller.selected != nil {
-                Section("Sincronia: \(offsetLabel)") {
-                    Button("Anticipa di 0,25 s", systemImage: "backward") { controller.nudge(by: -SubtitleController.offsetStep) }
-                    Button("Ritarda di 0,25 s", systemImage: "forward") { controller.nudge(by: SubtitleController.offsetStep) }
+                Section("Sync: \(offsetLabel)") {
+                    Button("Earlier by 0.25 s", systemImage: "backward") { controller.nudge(by: -SubtitleController.offsetStep) }
+                    Button("Later by 0.25 s", systemImage: "forward") { controller.nudge(by: SubtitleController.offsetStep) }
                     if controller.offset != 0 {
-                        Button("Ripristina", systemImage: "arrow.uturn.backward") { controller.resetOffset() }
+                        Button("Reset", systemImage: "arrow.uturn.backward") { controller.resetOffset() }
                     }
                 }
             }
@@ -36,7 +36,7 @@ struct SubtitleMenu: View {
         }
         .disabled(controller.tracks.isEmpty)
         .opacity(controller.tracks.isEmpty ? 0.4 : 1)
-        .accessibilityLabel("Sottotitoli")
+        .accessibilityLabel("Subtitles")
     }
 
     private var offsetLabel: String {

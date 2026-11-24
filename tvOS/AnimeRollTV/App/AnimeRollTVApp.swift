@@ -15,7 +15,7 @@ struct AnimeRollTVApp: App {
                 if session.isRestoring {
                     LaunchLoadingView(scale: 1.8)
                 } else if session.isLoggedIn {
-                    TVMainView()
+                    if session.showProfilePicker { TVProfilePicker() } else { TVMainView() }
                 } else {
                     TVLoginView()
                 }
@@ -25,6 +25,7 @@ struct AnimeRollTVApp: App {
             .tint(DS.accent)
             .environment(session)
             .environment(OfflineDownloads.shared)
+            .task(id: session.user?.id) { await session.checkProfilePicker() }
             .task {
                 DS.registerFonts()
                 await session.restore()
@@ -47,11 +48,11 @@ struct TVMainView: View {
     var body: some View {
         TabView {
             Tab("Home", systemImage: "house") { NavigationStack { TVHomeView() } }
-            Tab("Esplora", systemImage: "safari") { NavigationStack { TVExploreView() } }
-            Tab("Cerca", systemImage: "magnifyingglass") { NavigationStack { TVSearchView() } }
-            Tab("Libreria", systemImage: "books.vertical") { NavigationStack { TVLibraryView() } }
-            Tab("Download", systemImage: "arrow.down.to.line") { NavigationStack { TVDownloadsView() } }
-            Tab("Profilo", systemImage: "person") { NavigationStack { TVSettingsView() } }
+            Tab("Explore", systemImage: "safari") { NavigationStack { TVExploreView() } }
+            Tab("Search", systemImage: "magnifyingglass") { NavigationStack { TVSearchView() } }
+            Tab("Library", systemImage: "books.vertical") { NavigationStack { TVLibraryView() } }
+            Tab("Downloads", systemImage: "arrow.down.to.line") { NavigationStack { TVDownloadsView() } }
+            Tab("Profile", systemImage: "person") { NavigationStack { TVSettingsView() } }
         }
     }
 }
@@ -69,17 +70,17 @@ struct TVLoginView: View {
         HStack(spacing: 80) {
             VStack(alignment: .leading, spacing: 16) {
                 (Text("Anime") + Text("Roll").foregroundStyle(DS.accent)).font(DS.display(96, 800))
-                Text("Il tuo catalogo anime sul NAS").font(DS.body(32)).foregroundStyle(DS.textSecondary)
+                Text("Your anime catalog on your server").font(DS.body(32)).foregroundStyle(DS.textSecondary)
             }
             VStack(spacing: 24) {
-                TextField("Indirizzo NAS (https://…)", text: $session.serverURLString).keyboardType(.URL)
+                TextField("Server address (https://…)", text: $session.serverURLString).keyboardType(.URL)
                 TextField("Username", text: $username).textContentType(.username)
                 SecureField("Password", text: $password).textContentType(.password)
-                Button("Accedi") { run { try await session.login(username: username, password: password) } }
+                Button("Sign in") { run { try await session.login(username: username, password: password) } }
                     .disabled(username.isEmpty || password.isEmpty || busy)
-                Button("Accedi con passkey (iPhone)") { run { try await session.loginWithPasskey(username: username) } }
+                Button("Sign in with passkey (iPhone)") { run { try await session.loginWithPasskey(username: username) } }
                 if !offline.items.isEmpty {
-                    Button("Guarda i download offline") { session.continueOffline() }
+                    Button("Watch offline downloads") { session.continueOffline() }
                 }
                 if let error { Text(error).foregroundStyle(.red) }
             }
@@ -105,7 +106,7 @@ struct OfflineErrorAlert: ViewModifier {
     @Environment(OfflineDownloads.self) private var offline
 
     func body(content: Content) -> some View {
-        content.alert("Download non riuscito", isPresented: Binding(
+        content.alert("Download failed", isPresented: Binding(
             get: { offline.lastError != nil },
             set: { if !$0 { offline.lastError = nil } })) {
             Button("OK", role: .cancel) {}

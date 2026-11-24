@@ -4,14 +4,16 @@ public enum APIError: LocalizedError {
     case notLoggedIn
     case http(Int, String?)
     case invalidServerURL
+    case wrongPasscode
 
     public var errorDescription: String? {
         switch self {
-        case .notLoggedIn: "Sessione scaduta, accedi di nuovo."
-        case .invalidServerURL: "Indirizzo del NAS non valido."
-        case .http(401, _): "Credenziali non valide."
-        case .http(409, let msg): msg ?? "Conflitto."
-        case .http(let code, let msg): msg ?? "Errore del server (\(code))."
+        case .notLoggedIn: String(localized: "Session expired, sign in again.", bundle: .module)
+        case .invalidServerURL: String(localized: "Invalid server address.", bundle: .module)
+        case .wrongPasscode: String(localized: "Wrong passcode.", bundle: .module)
+        case .http(401, _): String(localized: "Invalid credentials.", bundle: .module)
+        case .http(409, let msg): msg ?? String(localized: "Conflict.", bundle: .module)
+        case .http(let code, let msg): msg ?? String(localized: "Server error (\(code)).", bundle: .module)
         }
     }
 }
@@ -30,7 +32,7 @@ public final class APIClient: @unchecked Sendable {
             if let seconds = try? c.decode(Double.self) { return Date(timeIntervalSinceReferenceDate: seconds) }
             let s = try c.decode(String.self)
             if let date = APIClient.parseDate(s) { return date }
-            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Data non valida: \(s)"))
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Invalid date: \(s)"))
         }
         return d
     }()
@@ -135,7 +137,7 @@ public final class APIClient: @unchecked Sendable {
 
     public func aniListConnectURL() async throws -> URL {
         let r: [String: String] = try await get("api/anilist/connect")
-        guard let url = URL(string: r["url"] ?? "") else { throw APIError.http(500, "URL AniList mancante") }
+        guard let url = URL(string: r["url"] ?? "") else { throw APIError.http(500, "AniList URL missing") }
         return url
     }
     public func aniListDisconnect() async throws { _ = try await request("DELETE", "api/anilist/connect") }
@@ -146,7 +148,7 @@ public final class APIClient: @unchecked Sendable {
         if let genre { q["genre"] = genre }
         return try await get("api/anilist/browse", query: q)
     }
-    /// "Simili": what AniList recommends to people who liked this title.
+    /// "Similar": what AniList recommends to people who liked this title.
     public func aniListRecommendations(_ id: Int) async throws -> [AniListMedia] { try await get("api/anilist/media/\(id)/recommendations") }
     public func aniListRelations(_ id: Int) async throws -> [RelatedDTO] { try await get("api/anilist/media/\(id)/relations") }
 
@@ -169,6 +171,63 @@ public final class APIClient: @unchecked Sendable {
     }
     public func aniListSetStatus(_ mediaId: Int, status: String) async throws {
         try await sendNoContent("PUT", "api/anilist/entry/\(mediaId)/status", json: ["status": status])
+    }
+
+    // MARK: Profiles
+
+    public func profiles() async throws -> [ProfileDTO] { try await get("api/profiles") }
+    @discardableResult
+    public func createProfile(name: String, avatar: Int, passcode: String?) async throws -> ProfileDTO {
+        struct Body: Encodable { let name: String; let avatar: Int; let passcode: String? }
+        return try await send("POST", "api/profiles", json: Body(name: name, avatar: avatar, passcode: passcode))
+    }
+    @discardableResult
+    public func updateProfile(_ id: UUID, name: String, avatar: Int) async throws -> ProfileDTO {
+        struct Body: Encodable { let name: String; let avatar: Int }
+        return try await send("PATCH", "api/profiles/\(id.uuidString.lowercased())", json: Body(name: name, avatar: avatar))
+    }
+    /// `current` is required when a passcode is already set; `passcode` nil removes it.
+    public func setPasscode(current: String?, passcode: String?) async throws {
+        struct Body: Encodable {
+            let current: String?; let passcode: String?
+            func encode(to encoder: Encoder) throws {   // passcode: null must be sent to remove it
+                var c = encoder.container(keyedBy: Keys.self)
+                try c.encodeIfPresent(current, forKey: .current)
+                try c.encode(passcode, forKey: .passcode)
+            }
+            enum Keys: String, CodingKey { case current, passcode }
+        }
+        do { try await sendNoContent("PUT", "api/profiles/me/passcode", json: Body(current: current, passcode: passcode)) }
+        catch APIError.notLoggedIn { throw APIError.wrongPasscode }   // 401 here means the current passcode is wrong
+    }
+    /// Switches to a profile and returns its login. 403 when the passcode is wrong.
+    public func enterProfile(_ id: UUID, passcode: String?) async throws -> AuthResponse {
+        struct Body: Encodable { let passcode: String? }
+        return try await send("POST", "api/profiles/\(id.uuidString.lowercased())/enter", json: Body(passcode: passcode))
+    }
+    public func deleteProfile(_ id: UUID, passcode: String? = nil) async throws {
+        _ = try await request("DELETE", "api/profiles/\(id.uuidString.lowercased())", query: passcode.map { ["passcode": $0] } ?? [:])
+    }
+
+    // MARK: Lists (AniList or MyAnimeList)
+
+    public func tracker() async throws -> TrackerInfo { try await get("api/tracker") }
+    public func setActiveTracker(_ provider: String) async throws { _ = try await request("PUT", "api/tracker/active", body: try Self.encoder.encode(["provider": provider])) }
+    public func malConnectURL() async throws -> URL {
+        let r: [String: String] = try await get("api/tracker/mal/connect")
+        guard let url = URL(string: r["url"] ?? "") else { throw APIError.http(500, "MyAnimeList") }
+        return url
+    }
+    public func malDisconnect() async throws { _ = try await request("DELETE", "api/tracker/mal/connect") }
+    public func trackerList(_ status: String) async throws -> [AniListEntry] { try await get("api/tracker/list/\(status)") }
+    /// nil when the title is not on the list in use.
+    public func trackerEntry(_ mediaId: Int) async throws -> AniListEntry? {
+        let data = try await request("GET", "api/tracker/entry/\(mediaId)")
+        return try? Self.decoder.decode(AniListEntry.self, from: data)
+    }
+    /// Changes status, episodes watched and/or rating (0-10, 0 removes it) on the list in use. 409: no list connected.
+    public func saveTrackerEntry(_ mediaId: Int, _ update: EntryUpdate) async throws {
+        try await sendNoContent("PUT", "api/tracker/entry/\(mediaId)", json: update)
     }
 
     // MARK: Library
@@ -199,15 +258,15 @@ public final class APIClient: @unchecked Sendable {
         struct Body: Encodable { let number: Double?; let isExtra: Bool? }
         try await sendNoContent("PATCH", "api/library/episodes/\(id)", json: Body(number: number, isExtra: isExtra))
     }
-    /// Deletes the file, subtitles and progress of an episode from the NAS (the series goes with its last episode).
+    /// Deletes the file, subtitles and progress of an episode from the server (the series goes with its last episode).
     public func deleteEpisode(_ id: Int) async throws { _ = try await request("DELETE", "api/library/episodes/\(id)") }
-    /// Deletes a whole series from the NAS to free space.
+    /// Deletes a whole series from the server to free space.
     public func deleteSeries(_ id: Int) async throws { _ = try await request("DELETE", "api/library/series/\(id)") }
-    /// Disk space on the NAS.
+    /// Disk space on the server.
     public func storageInfo() async throws -> StorageInfo { try await get("api/settings/storage") }
 
-    /// Asks the NAS to run the episode file through the import pipeline again (timestamps, A/V sync,
-    /// fast start, subtitles). Shows up in the NAS download list as "Riparazione".
+    /// Asks the server to run the episode file through the import pipeline again (timestamps, A/V sync,
+    /// fast start, subtitles). Shows up in the server download list as "Riparazione".
     public func repairEpisode(_ id: Int) async throws { _ = try await request("POST", "api/library/episodes/\(id)/repair") }
     public func repairSeries(_ id: Int) async throws { _ = try await request("POST", "api/library/series/\(id)/repair") }
     /// Queues, for every episode of the series in the library, the original (ASS) subtitles from a source; no video is downloaded.
@@ -223,7 +282,7 @@ public final class APIClient: @unchecked Sendable {
         return r["imported"] ?? 0
     }
 
-    // MARK: Sources & NAS downloads
+    // MARK: Sources & server downloads
 
     public func providers() async throws -> [ProviderInfo] { try await get("api/sources") }
     public func search(source: String, query: String) async throws -> [SourceSearchResult] {
@@ -234,11 +293,11 @@ public final class APIClient: @unchecked Sendable {
     }
     public func sourceStreamURL(source: String, ref: String) async throws -> URL {
         let r: [String: String] = try await get("api/sources/\(source)/stream", query: ["ref": ref])
-        guard let u = URL(string: r["url"] ?? "") else { throw APIError.http(404, "Stream non trovato") }
+        guard let u = URL(string: r["url"] ?? "") else { throw APIError.http(404, String(localized: "Stream not found", bundle: .module)) }
         return u
     }
 
-    /// Tells the NAS to download; the NAS does the work, the device can be closed.
+    /// Tells the server to download; the server does the work, the device can be closed.
     @discardableResult
     public func requestNASDownload(_ req: DownloadRequest) async throws -> [DownloadJob] { try await send("POST", "api/downloads", json: req) }
     public func nasDownloads(activeOnly: Bool = false) async throws -> [DownloadJob] {

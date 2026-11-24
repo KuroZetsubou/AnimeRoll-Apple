@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 // Mirrors the JSON of AnimeRoll.Server (camelCase).
 
@@ -8,6 +9,75 @@ public struct UserDTO: Codable, Hashable, Sendable {
     public let aniListConnected: Bool
     public let aniListUserName: String?
     public let passkeyCount: Int
+    /// Avatar colour index (0...7); the avatar is that colour plus the initial of the name.
+    public let avatar: Int
+    public let hasPasscode: Bool
+    /// List in use: "anilist" or "mal"; nil when no list is connected.
+    public let tracker: String?
+    public let malConnected: Bool
+    public let malUserName: String?
+
+    /// A list (AniList or MyAnimeList) is connected, so the title page can show and change status and rating.
+    public var hasTracker: Bool { tracker != nil }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, username, aniListConnected, aniListUserName, passkeyCount, avatar, hasPasscode, tracker, malConnected, malUserName
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        username = try c.decode(String.self, forKey: .username)
+        aniListConnected = try c.decodeIfPresent(Bool.self, forKey: .aniListConnected) ?? false
+        aniListUserName = try c.decodeIfPresent(String.self, forKey: .aniListUserName)
+        passkeyCount = try c.decodeIfPresent(Int.self, forKey: .passkeyCount) ?? 0
+        avatar = try c.decodeIfPresent(Int.self, forKey: .avatar) ?? 0
+        hasPasscode = try c.decodeIfPresent(Bool.self, forKey: .hasPasscode) ?? false
+        tracker = try c.decodeIfPresent(String.self, forKey: .tracker)
+        malConnected = try c.decodeIfPresent(Bool.self, forKey: .malConnected) ?? false
+        malUserName = try c.decodeIfPresent(String.self, forKey: .malUserName)
+    }
+}
+
+/// One profile of the server (a profile is a user): "Who's watching?".
+public struct ProfileDTO: Codable, Hashable, Identifiable, Sendable {
+    public let id: UUID
+    public let name: String
+    public let avatar: Int
+    public let hasPasscode: Bool
+    public let isCurrent: Bool
+    public let isOwner: Bool
+}
+
+public struct TrackerAccount: Codable, Hashable, Sendable {
+    public let configured: Bool
+    public let connected: Bool
+    public let userName: String?
+}
+
+public struct TrackerInfo: Codable, Hashable, Sendable {
+    public let active: String?
+    public let aniList: TrackerAccount
+    public let mal: TrackerAccount
+}
+
+/// Manual change of a list entry; every field is optional, score 0 removes the rating.
+public struct EntryUpdate: Encodable, Sendable {
+    public var status: String?
+    public var progress: Int?
+    public var score: Int?
+    public init(status: String? = nil, progress: Int? = nil, score: Int? = nil) { self.status = status; self.progress = progress; self.score = score }
+}
+
+/// Statuses of a list entry (AniList names, also used for MyAnimeList).
+public enum ListStatus {
+    public static let all = ["CURRENT", "PLANNING", "COMPLETED", "PAUSED", "DROPPED", "REPEATING"]
+}
+
+/// Avatar palette shared by every client: index 0...7.
+public enum AvatarPalette {
+    public static let colors: [Color] = ([0xFF6A1A, 0xE5484D, 0xF5A524, 0x30A46C, 0x12A594, 0x3E63DD, 0x8E4EC6, 0xD6409F] as [UInt32]).map { Color(hex: $0) }
+    public static func color(_ i: Int) -> Color { colors[((i % colors.count) + colors.count) % colors.count] }
 }
 
 public struct AuthResponse: Codable, Sendable {
@@ -35,6 +105,7 @@ public struct AniListMedia: Codable, Hashable, Identifiable, Sendable {
     public let averageScore: Int?
     public let nextAiringEpisode: Int?
     public let nextAiringAt: Int64?
+    public let malId: Int?
 
     /// "E5 · sab 8 nov, 18:30" for ongoing series, nil when AniList has no schedule.
     public var nextAiringText: String? {
@@ -42,7 +113,7 @@ public struct AniListMedia: Codable, Hashable, Identifiable, Sendable {
         let f = DateFormatter()
         f.locale = Locale(identifier: "it_IT")
         f.setLocalizedDateFormatFromTemplate("EEE d MMM HH:mm")
-        return "Prossimo episodio (E\(ep)): \(f.string(from: Date(timeIntervalSince1970: TimeInterval(at))))"
+        return String(localized: "Next episode (E\(ep)): \(f.string(from: Date(timeIntervalSince1970: TimeInterval(at))))", bundle: .module)
     }
 
     public var plainDescription: String {
@@ -183,13 +254,13 @@ public enum DownloadStatus: String, Codable, Sendable {
 
     public var label: String {
         switch self {
-        case .queued: "In coda"
-        case .running: "In corso"
-        case .postProcessing: "Post-elaborazione"
-        case .completed: "Completato"
-        case .failed: "Fallito"
-        case .cancelled: "Annullato"
-        case .paused: "In pausa"
+        case .queued: "Queued"
+        case .running: "Airing"
+        case .postProcessing: "Processing"
+        case .completed: "Completed"
+        case .failed: "Failed"
+        case .cancelled: "Cancelled"
+        case .paused: "Paused"
         case .unknown: "—"
         }
     }
@@ -207,7 +278,7 @@ public enum DownloadPriority: Int, CaseIterable, Identifiable, Sendable {
     case low = -1, normal = 0, high = 1
     public var id: Int { rawValue }
     public var label: String {
-        switch self { case .low: "Bassa"; case .normal: "Normale"; case .high: "Alta" }
+        switch self { case .low: String(localized: "Low", bundle: .module); case .normal: String(localized: "Normal", bundle: .module); case .high: String(localized: "High", bundle: .module) }
     }
 }
 
@@ -234,15 +305,15 @@ public struct DownloadJob: Codable, Hashable, Identifiable, Sendable {
     /// "Subito", "Alta", "Bassa" or nil for normal priority.
     public var priorityLabel: String? {
         switch priority ?? 0 {
-        case 10...: "Subito"
-        case 1..<10: "Alta"
-        case ..<0: "Bassa"
+        case 10...: String(localized: "Now", bundle: .module)
+        case 1..<10: String(localized: "High", bundle: .module)
+        case ..<0: String(localized: "Low", bundle: .module)
         default: nil
         }
     }
 
     /// Source shown in lists ("repair" jobs are library repairs, not downloads).
-    public var sourceLabel: String { source == "repair" ? "Riparazione" : source.capitalized }
+    public var sourceLabel: String { source == "repair" ? String(localized: "Repair", bundle: .module) : source.capitalized }
 }
 
 public struct DownloadItem: Codable, Sendable {
@@ -286,7 +357,7 @@ public struct PasskeyInfo: Codable, Hashable, Identifiable, Sendable {
     public let lastUsedAt: Date?
 }
 
-/// Anything the UI can open as a "title" page: either already on the NAS or only on AniList.
+/// Anything the UI can open as a "title" page: either already on the server or only on AniList.
 /// A title AniList links to this one (stagione precedente/successiva, storia parallela…); `relation` is already in Italian.
 public struct RelatedDTO: Codable, Hashable, Sendable {
     public let relation: String
@@ -324,7 +395,7 @@ public extension SeriesDTO {
     }
 }
 
-/// Space on the NAS disk: what is free, what the library takes, and the reserve the server always keeps free.
+/// Space on the server disk: what is free, what the library takes, and the reserve the server always keeps free.
 public struct StorageInfo: Codable, Sendable, Equatable {
     public let totalBytes: Int64
     public let freeBytes: Int64

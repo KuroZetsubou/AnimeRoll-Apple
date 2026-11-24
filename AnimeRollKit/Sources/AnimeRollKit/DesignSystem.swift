@@ -59,8 +59,10 @@ public enum DS {
     private static func font(_ family: String, _ size: CGFloat, _ weight: CGFloat) -> Font {
         registerFonts()
         let wght = 0x77676874   // 'wght' axis
-        let desc = UIFontDescriptor(fontAttributes: [.family: family, kCTFontVariationAttribute as UIFontDescriptor.AttributeName: [wght: weight]])
-        return Font(UIFont(descriptor: desc, size: size))
+        let desc = CTFontDescriptorCreateWithAttributes([
+            kCTFontFamilyNameAttribute: family, kCTFontVariationAttribute: [wght: weight],
+        ] as CFDictionary)
+        return Font(CTFontCreateWithFontDescriptor(desc, size, nil))
     }
 
     private static let registered: Void = {
@@ -93,7 +95,7 @@ public extension Double {
 }
 
 
-/// Shown at launch while the app checks the login with the NAS.
+/// Shown at launch while the app checks the login with the server.
 public struct LaunchLoadingView: View {
     private let scale: CGFloat
     public init(scale: CGFloat = 1) { self.scale = scale }
@@ -102,7 +104,7 @@ public struct LaunchLoadingView: View {
         VStack(spacing: 28 * scale) {
             (Text("Anime") + Text("Roll").foregroundStyle(DS.accent)).font(DS.display(52 * scale, 800)).tracking(-1)
             ProgressView().controlSize(.large).tint(DS.accent)
-            Text("Caricamento…").font(DS.body(16 * scale)).foregroundStyle(DS.textSecondary)
+            Text("Loading…").font(DS.body(16 * scale)).foregroundStyle(DS.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DS.background)

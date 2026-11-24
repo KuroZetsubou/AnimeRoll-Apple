@@ -17,7 +17,7 @@ struct TVPoster: View {
             AsyncImage(url: url) { img in img.resizable().aspectRatio(contentMode: .fill) } placeholder: { DS.surface }
                 .frame(width: wide ? 480 : 260, height: wide ? 270 : 390)
                 .clipShape(.rect(cornerRadius: DS.rPoster))
-                .overlay(alignment: .topLeading) { if let badge { TVBadge(text: badge).padding(12) } }
+                .overlay(alignment: .topLeading) { if let badge { TVBadge(text: LocalizedStringKey(badge)).padding(12) } }
                 .overlay(alignment: .bottom) {
                     if let progress {
                         GeometryReader { g in
@@ -53,16 +53,16 @@ struct TVRankedPoster: View {
 }
 
 struct TVBadge: View {
-    let text: String
+    let text: LocalizedStringKey
     var tint: Color = DS.accent
     var body: some View {
-        Text(text.uppercased()).font(DS.display(18, 700)).tracking(1.4).foregroundStyle(DS.onAccent)
+        Text(text).textCase(.uppercase).font(DS.display(18, 700)).tracking(1.4).foregroundStyle(DS.onAccent)
             .padding(.horizontal, 12).padding(.vertical, 4).background(tint, in: .rect(cornerRadius: DS.rBadge))
     }
 }
 
 struct TVShelf<Item: Hashable, Content: View>: View {
-    let title: String
+    let title: LocalizedStringKey
     let items: [Item]
     @ViewBuilder let content: (Item) -> Content
 
@@ -82,7 +82,7 @@ struct TVShelf<Item: Hashable, Content: View>: View {
 
 /// Genre / season / source chip for the remote: accent when selected.
 struct TVChip: View {
-    let title: String
+    let title: LocalizedStringKey
     var selected = false
     let action: () -> Void
     var body: some View {
@@ -96,8 +96,8 @@ struct TVChip: View {
 
 /// Screen title + optional subtitle.
 struct TVScreenTitle: View {
-    let text: String
-    var subtitle: String? = nil
+    let text: LocalizedStringKey
+    var subtitle: LocalizedStringKey? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(text).font(DS.display(64, 800))
@@ -108,12 +108,12 @@ struct TVScreenTitle: View {
 
 /// Group card of the Profilo screen.
 struct TVGroup<Content: View>: View {
-    let title: String
-    var note: String? = nil
+    let title: LocalizedStringKey
+    var note: LocalizedStringKey? = nil
     @ViewBuilder let content: () -> Content
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title.uppercased()).font(DS.body(22, 700)).tracking(2).foregroundStyle(DS.textTertiary)
+            Text(title).textCase(.uppercase).font(DS.body(22, 700)).tracking(2).foregroundStyle(DS.textTertiary)
             VStack(alignment: .leading, spacing: 0) { content() }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(DS.surface, in: .rect(cornerRadius: DS.rCard))
@@ -124,7 +124,7 @@ struct TVGroup<Content: View>: View {
 
 struct TVRow: View {
     let icon: String
-    let label: String
+    let label: LocalizedStringKey
     var value: String? = nil
     var body: some View {
         HStack(spacing: 20) {
@@ -139,7 +139,14 @@ struct TVRow: View {
 
 enum AniListStatusLabel {
     static func text(_ s: String) -> String {
-        ["CURRENT": "In corso", "PLANNING": "Pianificato", "COMPLETED": "Completato", "PAUSED": "In pausa",
-         "DROPPED": "Abbandonato", "REPEATING": "Rewatch"][s] ?? s
+        switch s {
+        case "CURRENT": String(localized: "Watching")
+        case "PLANNING": String(localized: "Planning")
+        case "COMPLETED": String(localized: "Completed")
+        case "PAUSED": String(localized: "Paused")
+        case "DROPPED": String(localized: "Dropped")
+        case "REPEATING": String(localized: "Rewatching")
+        default: s
+        }
     }
 }

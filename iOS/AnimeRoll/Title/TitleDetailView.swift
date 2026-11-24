@@ -23,7 +23,7 @@ final class TitleModel {
         do {
             if let alId = ref.aniListId {
                 async let m = try? api.aniListMedia(alId)
-                async let e = try? api.aniListEntry(alId)
+                async let e = try? api.trackerEntry(alId)
                 async let s = try? api.series(aniListId: alId)
                 let (mm, ee, ss) = await (m, e, s)
                 media = mm ?? media; entry = ee ?? nil; series = ss ?? series
@@ -33,7 +33,7 @@ final class TitleModel {
         } catch { self.error = error.localizedDescription }
     }
 
-    /// After deleting from the NAS: drop it locally; with no episodes left the series is gone too.
+    /// After deleting from the server: drop it locally; with no episodes left the series is gone too.
     func removed(episode id: Int) {
         episodes.removeAll { $0.id == id }
         if episodes.isEmpty { series = nil }
@@ -47,10 +47,10 @@ final class TitleModel {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// "Simili": AniList's own recommendations, with the NAS version of a title when we have it.
+    /// "Similar": AniList's own recommendations, with the server version of a title when we have it.
     var similar: [TitleRef] = []
     var similarLoaded = false
-    /// "Stagioni e correlati": prequels, sequels, side stories (with the relation label).
+    /// "Seasons and related": prequels, sequels, side stories (with the relation label).
     var related: [(relation: String, ref: TitleRef)] = []
     func loadSimilar(_ api: APIClient) async {
         guard !similarLoaded, let alId = ref.aniListId ?? media?.id else { similarLoaded = true; return }
@@ -58,7 +58,7 @@ final class TitleModel {
         async let lib = try? api.library()
         async let rel = try? api.aniListRelations(alId)
         let (r, l, rl) = await (rec, lib, rel)
-        // Two NAS series can share one AniList id: keep the first instead of crashing.
+        // Two server series can share one AniList id: keep the first instead of crashing.
         let onNAS = Dictionary((l ?? []).compactMap { s in s.aniListId.map { ($0, s) } }, uniquingKeysWith: { first, _ in first })
         var seen = Set<Int>()
         similar = (r ?? []).filter { $0.id != alId && seen.insert($0.id).inserted }.map { m in onNAS[m.id].map(TitleRef.series) ?? .aniList(m) }
@@ -66,7 +66,7 @@ final class TitleModel {
         similarLoaded = true
     }
 
-    /// First not-completed episode, for the big "Riproduci" button.
+    /// First not-completed episode, for the big "Play" button.
     var nextToWatch: EpisodeDTO? {
         let watchedOnAniList = Double(entry?.progress ?? 0)
         let regular = episodes.filter { !$0.extra }
@@ -137,25 +137,25 @@ struct TitleDetailView: View {
         .refreshable { await model.load(session.api) }
         .fullScreenCover(item: $playing, onDismiss: { Task { await model.load(session.api) } }) { PlayerScreen(item: $0) }
         .fullScreenCover(item: $fullScreenItem, onDismiss: { Task { await model.load(session.api) } }) { PlayerScreen(item: $0, startFullScreen: true) }
-        .confirmationDialog("Eliminare l'episodio dal NAS?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
-            Button("Elimina episodio \(deleting?.numberLabel ?? "")", role: .destructive) {
+        .confirmationDialog("Delete the episode from the server?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
+            Button("Delete episode \(deleting?.numberLabel ?? "")", role: .destructive) {
                 guard let ep = deleting else { return }
                 Task {
                     do { try await session.api.deleteEpisode(ep.id); model.removed(episode: ep.id) }
                     catch { deleteError = error.localizedDescription }
                 }
             }
-        } message: { Text("Il file e i sottotitoli vengono cancellati dal NAS e liberano spazio. Se vuoi rivederlo dovrai scaricarlo di nuovo.") }
-        .confirmationDialog("Eliminare tutta la serie dal NAS?", isPresented: $deletingSeries, titleVisibility: .visible) {
-            Button("Elimina la serie e tutti gli episodi", role: .destructive) {
+        } message: { Text("The file and subtitles are deleted from the server, freeing space. To watch it again you will have to download it again.") }
+        .confirmationDialog("Delete the whole series from the server?", isPresented: $deletingSeries, titleVisibility: .visible) {
+            Button("Delete the series and all its episodes", role: .destructive) {
                 guard let series = model.series else { return }
                 Task {
                     do { try await session.api.deleteSeries(series.id); model.removedSeries() }
                     catch { deleteError = error.localizedDescription }
                 }
             }
-        } message: { Text("Tutti gli episodi di “\(model.title)” vengono cancellati dal NAS.") }
-        .alert("Eliminazione non riuscita", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
+        } message: { Text("All episodes of “\(model.title)” are deleted from the server.") }
+        .alert("Delete failed", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
             Button("OK", role: .cancel) {}
         } message: { Text(deleteError ?? "") }
         .sheet(item: movingItem) { batch in moveSheet(batch) }
@@ -191,17 +191,14 @@ struct TitleDetailView: View {
     }
 
     private var statusSheet: some View {
-        AniListStatusSheet(current: model.entry?.status, progress: model.entry?.progress ?? 0, total: model.media?.episodes,
-                           setProgress: { n in
-            guard let id = ref.aniListId ?? model.media?.id else { return }
-            Task { try? await session.api.aniListSetProgress(id, progress: n); await model.load(session.api) }
-        }) { status in
-            showStatus = false
-            guard let id = ref.aniListId ?? model.media?.id else { return }
-            Task { try? await session.api.aniListSetStatus(id, status: status); await model.load(session.api) }
+        ListStatusSheet(entry: model.entry, total: model.media?.episodes) { update in
+            guard let id = ref.aniListId ?? model.media?.id else { return model.entry }
+            try await session.api.saveTrackerEntry(id, update)
+            let e = try await session.api.trackerEntry(id)
+            model.entry = e
+            return e
         }
-        .presentationDetents([.height(470)])
-        .presentationBackground(DS.surfaceRaised)
+        .presentationDetents([.large]).presentationBackground(DS.surfaceRaised)
     }
 
     // MARK: Header (banner or inline player)
@@ -231,7 +228,7 @@ struct TitleDetailView: View {
                             Image(systemName: "chevron.left").font(.body.bold()).foregroundStyle(.white)
                                 .frame(width: 44, height: 44).glassCircle()
                         }
-                        .accessibilityLabel("Indietro")
+                        .accessibilityLabel("Back")
                         .padding(.leading, 12).padding(.top, 14)
                     }
                 }
@@ -240,7 +237,7 @@ struct TitleDetailView: View {
                         Button { Haptics.tick(); play(next) } label: {
                             Image(systemName: "play.fill").font(.title).foregroundStyle(.white).frame(width: 64, height: 64).glassCircle()
                         }
-                        .accessibilityLabel("Riproduci")
+                        .accessibilityLabel("Play")
                     }
                 }
         }
@@ -254,7 +251,7 @@ struct TitleDetailView: View {
             }
             HStack(spacing: 8) {
                 Text(metaLine).font(DS.body(13)).foregroundStyle(DS.textSecondary)
-                if !model.episodes.isEmpty { BadgeLabel(text: "Sul NAS") }
+                if !model.episodes.isEmpty { BadgeLabel(text: "On server") }
             }
             .padding(.top, 4)
             nextAiringRow
@@ -263,12 +260,15 @@ struct TitleDetailView: View {
 
     /// AniList status card; tapping it opens the status sheet ("+ Lista" included).
     @ViewBuilder private var aniListRow: some View {
-        if (ref.aniListId ?? model.media?.id) != nil, session.user?.aniListConnected == true {
+        if (ref.aniListId ?? model.media?.id) != nil, session.user?.hasTracker == true {
             Button { showStatus = true } label: {
                 HStack(spacing: 10) {
                     Image(systemName: model.entry == nil ? "plus" : "link").foregroundStyle(DS.teal)
-                    Text(model.entry.map { "AniList: guardati \($0.progress)/\(model.media?.episodes.map(String.init) ?? "?") · \(statusLabel($0.status))" }
-                         ?? "Aggiungi alla lista AniList")
+                    Text(model.entry.map { e in
+                        let total = model.media?.episodes.map(String.init) ?? "?"
+                        let score = e.score.flatMap { $0 > 0 ? " · ★ \(Int($0.rounded()))" : nil } ?? ""
+                        return String(localized: "Watched \(e.progress)/\(total) · \(statusLabel(e.status))") + score
+                    } ?? String(localized: "Add to your list"))
                         .font(DS.body(14))
                     Spacer()
                     Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(DS.textTertiary)
@@ -278,8 +278,8 @@ struct TitleDetailView: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
-        } else if session.user?.aniListConnected != true {
-            Text("Collega AniList dal Profilo").font(DS.body(13)).foregroundStyle(DS.textTertiary)
+        } else if session.user?.hasTracker != true {
+            Text("Connect a list from Profile").font(DS.body(13)).foregroundStyle(DS.textTertiary)
         }
     }
 
@@ -287,7 +287,7 @@ struct TitleDetailView: View {
         var parts: [String] = []
         if let y = model.media?.year ?? model.series?.year { parts.append(String(y)) }
         if let g = (model.media?.genres ?? model.series?.genreList), !g.isEmpty { parts.append(g.prefix(3).joined(separator: " · ")) }
-        if let n = model.media?.episodes ?? model.series?.totalEpisodes { parts.append("\(n) episodi") }
+        if let n = model.media?.episodes ?? model.series?.totalEpisodes { parts.append(String(localized: "\(n) episodes")) }
         if let s = model.media?.averageScore { parts.append("★ \(s)%") }
         return parts.joined(separator: " · ")
     }
@@ -304,17 +304,17 @@ struct TitleDetailView: View {
         if let next = model.nextToWatch, model.series != nil {
             HStack(spacing: 10) {
                 Button { Haptics.tick(); play(next) } label: {
-                    Label(next.positionSeconds ?? 0 > 5 && !next.completed ? "Riprendi E\(next.numberLabel)" : "Guarda E\(next.numberLabel)",
+                    Label(next.positionSeconds ?? 0 > 5 && !next.completed ? "Resume E\(next.numberLabel)" : "Watch E\(next.numberLabel)",
                           systemImage: "play.fill")
                 }
                 .buttonStyle(PrimaryButtonStyle())
-                Button { showSources = true } label: { Label("Trova episodi", systemImage: "magnifyingglass") }
+                Button { showSources = true } label: { Label("Find episodes", systemImage: "magnifyingglass") }
                     .buttonStyle(PrimaryButtonStyle(prominent: false)).fixedSize()
             }
         } else if !model.loading {
             VStack(spacing: 10) {
-                Text("Non ancora sul NAS").font(DS.body(14)).foregroundStyle(DS.textSecondary)
-                Button { showSources = true } label: { Label("Trova episodi", systemImage: "magnifyingglass") }
+                Text("Not on the server yet").font(DS.body(14)).foregroundStyle(DS.textSecondary)
+                Button { showSources = true } label: { Label("Find episodes", systemImage: "magnifyingglass") }
                     .buttonStyle(PrimaryButtonStyle())
             }
             .frame(maxWidth: .infinity)
@@ -328,7 +328,7 @@ struct TitleDetailView: View {
                     .lineLimit(expanded ? nil : 3)
                     .onTapGesture { withAnimation(DS.base) { expanded.toggle() } }
                 if model.description.count > 160 {
-                    Button(expanded ? "meno" : "altro") { withAnimation(DS.base) { expanded.toggle() } }
+                    Button(expanded ? "less" : "more") { withAnimation(DS.base) { expanded.toggle() } }
                         .font(DS.body(14, 700)).foregroundStyle(.white)
                 }
             }
@@ -336,36 +336,36 @@ struct TitleDetailView: View {
     }
 
     private func statusLabel(_ s: String) -> String {
-        AniListStatusSheet.label(s)
+        ListStatusSheet.label(s)
     }
 
     // MARK: Episodi / Simili
 
     private var sectionPicker: some View {
-        PillSegmented(options: ["Episodi", "Simili"], selection: $section).padding(.horizontal)
+        PillSegmented(options: ["Episodes", "Similar"], selection: $section).padding(.horizontal)
     }
 
     @ViewBuilder private var episodesSection: some View {
         if model.loading && model.episodes.isEmpty {
             ProgressView().frame(maxWidth: .infinity).padding(.top, 20)
         } else if model.episodes.isEmpty {
-            Text("Nessun episodio sul NAS").font(DS.body(14)).foregroundStyle(DS.textTertiary)
+            Text("No episodes on the server").font(DS.body(14)).foregroundStyle(DS.textTertiary)
                 .frame(maxWidth: .infinity).padding(.vertical, 32)
         } else {
             if let series = model.series {
                 HStack(spacing: 8) {
                     Spacer()
                     Menu {
-                        Button("Ripara tutta la serie sul NAS", systemImage: "wrench.and.screwdriver") {
+                        Button("Repair the whole series on the server", systemImage: "wrench.and.screwdriver") {
                             Task { try? await session.api.repairSeries(series.id) }
                         }
-                        Button("Modifica info e immagini…", systemImage: "pencil") { editingSeries = true }
-                        Button("Sposta la serie in un'altra…", systemImage: "arrow.right.circle") { moving = model.episodes }
-                        Button("Elimina la serie dal NAS…", systemImage: "trash", role: .destructive) { deletingSeries = true }
-                    } label: { Label("Altro", systemImage: "ellipsis") }
+                        Button("Edit info and images…", systemImage: "pencil") { editingSeries = true }
+                        Button("Move the series to another…", systemImage: "arrow.right.circle") { moving = model.episodes }
+                        Button("Delete series from server…", systemImage: "trash", role: .destructive) { deletingSeries = true }
+                    } label: { Label("More", systemImage: "ellipsis") }
                         .buttonStyle(GhostButtonStyle())
                     Button { Task { for e in model.episodes where !offline.isDownloaded(e.id) { await offline.download(e, of: series, api: session.api) } } } label: {
-                        Label("Scarica tutti sul dispositivo", systemImage: "arrow.down.to.line")
+                        Label("Download all to device", systemImage: "arrow.down.to.line")
                     }
                     .buttonStyle(GhostButtonStyle())
                 }
@@ -382,7 +382,7 @@ struct TitleDetailView: View {
             }
             .padding(.horizontal)
             if !showAll && model.episodes.count > 12 {
-                Button("Altri episodi (\(model.episodes.count - 12))") { withAnimation(DS.base) { showAll = true } }
+                Button("More episodes (\(model.episodes.count - 12))") { withAnimation(DS.base) { showAll = true } }
                     .buttonStyle(PrimaryButtonStyle(prominent: false)).padding(.horizontal)
             }
         }
@@ -393,15 +393,15 @@ struct TitleDetailView: View {
             if !model.similarLoaded {
                 ProgressView().frame(maxWidth: .infinity).padding(.vertical, 32)
             } else if model.similar.isEmpty && model.related.isEmpty {
-                Text("Nessun titolo simile").font(DS.body(14)).foregroundStyle(DS.textTertiary).frame(maxWidth: .infinity).padding(.vertical, 32)
+                Text("No similar titles").font(DS.body(14)).foregroundStyle(DS.textTertiary).frame(maxWidth: .infinity).padding(.vertical, 32)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     if !model.related.isEmpty {
-                        Text("Stagioni e correlati").font(DS.display(17, 700)).padding(.horizontal)
+                        Text("Seasons and related").font(DS.display(17, 700)).padding(.horizontal)
                         posterGrid(model.related.map { ($0.ref, $0.relation) })
                     }
                     if !model.similar.isEmpty {
-                        Text("Simili").font(DS.display(17, 700)).padding(.horizontal).padding(.top, model.related.isEmpty ? 0 : 14)
+                        Text("Similar").font(DS.display(17, 700)).padding(.horizontal).padding(.top, model.related.isEmpty ? 0 : 14)
                         posterGrid(model.similar.map { ($0, nil) })
                     }
                 }
@@ -455,7 +455,7 @@ struct EpisodeRow: View {
                     }
                     .frame(width: 36, height: 36)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(episode.title ?? "Episodio \(episode.numberLabel)").font(DS.body(15, 600)).lineLimit(1)
+                        Text(episode.title ?? "Episode \(episode.numberLabel)").font(DS.body(15, 600)).lineLimit(1)
                         Text([episode.durationSeconds.flatMap { $0 >= 60 ? $0.durationLabel : nil }, episode.sizeBytes.fileSize, episode.source.capitalized]
                             .compactMap { $0 }.joined(separator: " · "))
                             .font(DS.body(12)).foregroundStyle(DS.textTertiary)
@@ -471,22 +471,22 @@ struct EpisodeRow: View {
         .padding(.vertical, 12)
         .overlay(alignment: .bottom) { Rectangle().fill(DS.hairline).frame(height: 1) }
         .contextMenu {
-            // Audio out of sync, slow to start, subtitles missing: the NAS reprocesses the file.
-            Button("Ripara sul NAS", systemImage: "wrench.and.screwdriver") {
+            // Audio out of sync, slow to start, subtitles missing: the server reprocesses the file.
+            Button("Repair on server", systemImage: "wrench.and.screwdriver") {
                 Task { try? await session.api.repairEpisode(episode.id) }
             }
             if let file = offline.localURL(for: episode.id) {
-                ShareLink(item: file) { Label("Apri con…", systemImage: "square.and.arrow.up") }
+                ShareLink(item: file) { Label("Open with…", systemImage: "square.and.arrow.up") }
             }
             if let onEdit {
-                Button("Modifica numero…", systemImage: "pencil", action: onEdit)
+                Button("Edit number…", systemImage: "pencil", action: onEdit)
             }
             if let onMove {
-                Button("Sposta in un'altra serie…", systemImage: "arrow.right.circle", action: onMove)
+                Button("Move to another series…", systemImage: "arrow.right.circle", action: onMove)
             }
             if let onDelete {
                 Divider()
-                Button("Elimina dal NAS…", systemImage: "trash", role: .destructive, action: onDelete)
+                Button("Delete from server…", systemImage: "trash", role: .destructive, action: onDelete)
             }
         }
     }
@@ -494,7 +494,7 @@ struct EpisodeRow: View {
     @ViewBuilder private var deviceDownloadButton: some View {
         if offline.isDownloaded(episode.id) {
             Menu {
-                Button("Rimuovi dal dispositivo", systemImage: "trash", role: .destructive) { offline.delete(episode.id) }
+                Button("Remove from device", systemImage: "trash", role: .destructive) { offline.delete(episode.id) }
             } label: { Image(systemName: "checkmark.circle.fill").font(.title3).foregroundStyle(DS.accent).frame(width: 44, height: 44) }
         } else if let p = offline.inFlight[episode.id] {
             Button { offline.cancel(episode.id) } label: {
@@ -504,66 +504,118 @@ struct EpisodeRow: View {
             Button { Task { await offline.download(episode, of: series, api: session.api) } } label: {
                 Image(systemName: "arrow.down.to.line").font(.body.weight(.semibold)).foregroundStyle(.white).frame(width: 44, height: 44)
             }
-            .accessibilityLabel("Scarica sul dispositivo")
+            .accessibilityLabel("Download to device")
         }
     }
 }
 
 
-/// "Stato su AniList": In corso, Pianificato, Completato, In pausa, Abbandonato.
-struct AniListStatusSheet: View {
-    let current: String?
-    let progress: Int
+/// Status, episodes watched and rating (1-10) of a title on the list in use (AniList or MyAnimeList).
+struct ListStatusSheet: View {
     let total: Int?
-    let setProgress: (Int) -> Void
-    let pick: (String) -> Void
-    @State private var count: Int
+    let save: (EntryUpdate) async throws -> AniListEntry?
+    @State private var cur: AniListEntry?
+    @State private var busy = false
+    @State private var error: String?
 
-    init(current: String?, progress: Int, total: Int?, setProgress: @escaping (Int) -> Void, pick: @escaping (String) -> Void) {
-        self.current = current; self.progress = progress; self.total = total; self.setProgress = setProgress; self.pick = pick
-        _count = State(initialValue: progress)
+    init(entry: AniListEntry?, total: Int?, save: @escaping (EntryUpdate) async throws -> AniListEntry?) {
+        self.total = total; self.save = save
+        _cur = State(initialValue: entry)
     }
 
     static func label(_ s: String) -> String {
-        ["CURRENT": "In corso", "PLANNING": "Pianificato", "COMPLETED": "Completato", "PAUSED": "In pausa",
-         "DROPPED": "Abbandonato", "REPEATING": "Rewatch"][s] ?? s
+        switch s {
+        case "CURRENT": String(localized: "Watching")
+        case "PLANNING": String(localized: "Planning")
+        case "COMPLETED": String(localized: "Completed")
+        case "PAUSED": String(localized: "Paused")
+        case "DROPPED": String(localized: "Dropped")
+        case "REPEATING": String(localized: "Rewatching")
+        default: s
+        }
     }
 
+    private var progress: Int { cur?.progress ?? 0 }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("Stato su AniList").font(DS.display(20, 700)).padding(.top, 28).padding(.bottom, 8)
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Episodi guardati").font(DS.body(16))
-                    Text(total.map { "su \($0)" } ?? "").font(DS.body(12)).foregroundStyle(DS.textTertiary)
-                }
-                Spacer()
-                Stepper(value: $count, in: 0...(total ?? 9999)) { Text("\(count)").font(DS.body(16, 700)).frame(maxWidth: .infinity, alignment: .trailing) }
-                    .fixedSize()
-                    .onChange(of: count) { _, n in setProgress(n) }
-            }
-            .frame(height: 56)
-            Rectangle().fill(DS.hairline).frame(height: 1)
-            ForEach(["CURRENT", "PLANNING", "COMPLETED", "PAUSED", "DROPPED"], id: \.self) { s in
-                Button { Haptics.tick(); pick(s) } label: {
-                    HStack {
-                        Text(Self.label(s)).font(DS.body(16))
-                        Spacer()
-                        if s == current { Image(systemName: "checkmark").foregroundStyle(DS.accent) }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("List status").font(DS.display(20, 700)).padding(.top, 28).padding(.bottom, 8)
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Episodes watched").font(DS.body(16))
+                        if let total { Text("of \(total)").font(DS.body(12)).foregroundStyle(DS.textTertiary) }
                     }
-                    .frame(height: 50).contentShape(.rect)
+                    Spacer()
+                    stepButton("minus", label: "One less", disabled: busy || progress <= 0) { apply(EntryUpdate(progress: progress - 1)) }
+                    Text("\(progress)").font(DS.body(17, 700)).frame(minWidth: 36)
+                    stepButton("plus", label: "One more", disabled: busy || progress >= (total ?? 9999)) { apply(EntryUpdate(progress: progress + 1)) }
                 }
-                .buttonStyle(.plain)
+                .frame(height: 56)
                 Rectangle().fill(DS.hairline).frame(height: 1)
+
+                Text("Status").font(DS.body(12, 700)).tracking(1).foregroundStyle(DS.textTertiary).padding(.top, 16).padding(.bottom, 4)
+                ForEach(ListStatus.all, id: \.self) { s in
+                    Button { Haptics.tick(); apply(EntryUpdate(status: s)) } label: {
+                        HStack {
+                            Text(Self.label(s)).font(DS.body(16))
+                            Spacer()
+                            if s == cur?.status { Image(systemName: "checkmark").foregroundStyle(DS.accent) }
+                        }
+                        .frame(height: 48).contentShape(.rect)
+                    }
+                    .buttonStyle(.plain).disabled(busy)
+                    Rectangle().fill(DS.hairline).frame(height: 1)
+                }
+
+                Text("Your rating").font(DS.body(12, 700)).tracking(1).foregroundStyle(DS.textTertiary).padding(.top, 16).padding(.bottom, 8)
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 5), spacing: 8) {
+                    ForEach(1...10, id: \.self) { n in
+                        let on = Int((cur?.score ?? 0).rounded()) == n
+                        Button { apply(EntryUpdate(score: n)) } label: {
+                            Text("\(n)").font(DS.display(16, 700)).frame(maxWidth: .infinity).frame(height: 44)
+                                .foregroundStyle(on ? DS.onAccent : .white)
+                                .background(on ? DS.accent : DS.surface, in: .rect(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain).disabled(busy || cur == nil)
+                    }
+                }
+                if (cur?.score ?? 0) > 0 {
+                    Button("Remove rating") { apply(EntryUpdate(score: 0)) }
+                        .font(DS.body(14, 600)).foregroundStyle(DS.accent).padding(.top, 10).disabled(busy)
+                }
+                if cur == nil {
+                    Text("Choose a status first to add this title to your list, then you can rate it.")
+                        .font(DS.body(12)).foregroundStyle(DS.textTertiary).padding(.top, 8)
+                }
+                if let error { Text(error).font(DS.body(13)).foregroundStyle(DS.pink).padding(.top, 10) }
             }
-            Spacer()
+            .padding(.horizontal, 20).padding(.bottom, 24)
         }
-        .padding(.horizontal, 20)
+    }
+
+    private func stepButton(_ icon: String, label: LocalizedStringKey, disabled: Bool, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon).font(.body.weight(.bold)).frame(width: 40, height: 40)
+                .background(DS.surface, in: .circle).opacity(disabled ? 0.4 : 1)
+        }
+        .buttonStyle(.plain).disabled(disabled).accessibilityLabel(label)
+    }
+
+    private func apply(_ update: EntryUpdate) {
+        busy = true; error = nil
+        Task {
+            do { cur = try await save(update) }
+            catch {
+                self.error = (error as? APIError).flatMap { if case .http(409, _) = $0 { String(localized: "Connect a list from Profile") } else { nil } } ?? error.localizedDescription
+            }
+            busy = false
+        }
     }
 }
 
 
-/// "Modifica numero": fixes the number of one episode by hand, or marks it as an extra (EX1) that AniList never counts.
+/// "Edit number": fixes the number of one episode by hand, or marks it as an extra (EX1) that AniList never counts.
 struct EditEpisodeSheet: View {
     let episode: EpisodeDTO
     let done: () -> Void
@@ -584,17 +636,17 @@ struct EditEpisodeSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Modifica numero").font(DS.display(22, 800)).padding(.top, 24)
-            TextField("Numero", text: $number).keyboardType(.decimalPad).font(DS.body(18))
+            Text("Edit number").font(DS.display(22, 800)).padding(.top, 24)
+            TextField("Number", text: $number).keyboardType(.decimalPad).font(DS.body(18))
                 .padding(14).background(DS.surface, in: .rect(cornerRadius: DS.rCard))
             Toggle(isOn: $isExtra) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Contenuto extra").font(DS.body(15, 600))
-                    Text("Compare come EX\(number) e non conta per il progresso su AniList.").font(DS.body(12)).foregroundStyle(DS.textTertiary)
+                    Text("Extra content").font(DS.body(15, 600))
+                    Text("Shown as EX\(number) and not counted in AniList progress.").font(DS.body(12)).foregroundStyle(DS.textTertiary)
                 }
             }
             if let error { Text(error).font(DS.body(13)).foregroundStyle(.red) }
-            Button { save() } label: { Text("Salva").frame(maxWidth: .infinity) }
+            Button { save() } label: { Text("Save").frame(maxWidth: .infinity) }
                 .buttonStyle(PrimaryButtonStyle()).disabled(parsed == nil || busy)
             Spacer()
         }
@@ -613,7 +665,7 @@ struct EditEpisodeSheet: View {
     }
 }
 
-/// "Modifica info": fixes title, description, poster, banner and the AniList link of a series; "Aggiorna da AniList" re-reads them.
+/// "Edit info": fixes title, description, poster, banner and the AniList link of a series; "Aggiorna da AniList" re-reads them.
 struct EditSeriesSheet: View {
     let series: SeriesDTO
     let done: (Bool) -> Void
@@ -650,18 +702,18 @@ struct EditSeriesSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Modifica info").font(DS.display(22, 800)).padding(.top, 24)
-                field("Titolo", $title)
-                field("ID AniList (vuoto = nessun collegamento)", $aniListId)
-                field("Indirizzo del poster", $poster, lines: 3)
-                field("Indirizzo del banner", $banner, lines: 3)
-                field("Descrizione", $desc, lines: 8)
+                Text("Edit info").font(DS.display(22, 800)).padding(.top, 24)
+                field("Title", $title)
+                field("AniList ID (empty = no link)", $aniListId)
+                field("Poster URL", $poster, lines: 3)
+                field("Banner URL", $banner, lines: 3)
+                field("Description", $desc, lines: 8)
                 if let error { Text(error).font(DS.body(13)).foregroundStyle(.red) }
-                Button { save(refresh: false) } label: { Text("Salva").frame(maxWidth: .infinity) }
+                Button { save(refresh: false) } label: { Text("Save").frame(maxWidth: .infinity) }
                     .buttonStyle(PrimaryButtonStyle()).disabled(busy || newId == nil || title.trimmingCharacters(in: .whitespaces).isEmpty)
-                Button { save(refresh: true) } label: { Label("Salva e aggiorna da AniList", systemImage: "arrow.clockwise").frame(maxWidth: .infinity) }
+                Button { save(refresh: true) } label: { Label("Save and refresh from AniList", systemImage: "arrow.clockwise").frame(maxWidth: .infinity) }
                     .buttonStyle(PrimaryButtonStyle(prominent: false)).disabled(busy || (newId ?? 0) == 0)
-                Text("“Aggiorna da AniList” sostituisce titolo, descrizione, immagini, episodi, generi e anno con quelli di AniList.")
+                Text("“Refresh from AniList” replaces title, description, images, episodes, genres and year with AniList’s.")
                     .font(DS.body(12)).foregroundStyle(DS.textTertiary)
             }
             .padding(.horizontal, 20).padding(.bottom, 30)
@@ -686,7 +738,7 @@ struct EditSeriesSheet: View {
 
 struct MoveBatch: Identifiable { let episodes: [EpisodeDTO]; var id: String { episodes.map { String($0.id) }.joined(separator: ",") } }
 
-/// "Sposta in un'altra serie": pick the right AniList title (e.g. the correct season); files, subtitles and progress follow.
+/// "Move to another series": pick the right AniList title (e.g. the correct season); files, subtitles and progress follow.
 struct MoveEpisodesSheet: View {
     let episodes: [EpisodeDTO]
     let fromTitle: String
@@ -706,8 +758,9 @@ struct MoveEpisodesSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Sposta in un'altra serie").font(DS.display(22, 800)).padding(.top, 24)
-                Text("Sposti \(episodes.count == 1 ? "l'episodio \(episodes[0].numberLabel)" : "\(episodes.count) episodi") di “\(fromTitle)”. Il file, i sottotitoli e i progressi vanno con loro.")
+                Text("Move to another series").font(DS.display(22, 800)).padding(.top, 24)
+                Text(episodes.count == 1 ? "You are moving episode \(episodes[0].numberLabel) of “\(fromTitle)”. The file, subtitles and progress go with it."
+                                         : "You are moving \(episodes.count) episodes of “\(fromTitle)”. The files, subtitles and progress go with them.")
                     .font(DS.body(13)).foregroundStyle(DS.textSecondary)
                 if let picked {
                     VStack(alignment: .leading, spacing: 4) {
@@ -716,20 +769,20 @@ struct MoveEpisodesSheet: View {
                             .font(DS.body(12)).foregroundStyle(DS.textTertiary)
                     }
                     .padding(14).frame(maxWidth: .infinity, alignment: .leading).background(DS.surface, in: .rect(cornerRadius: DS.rCard))
-                    Text("Cambia il numero degli episodi di").font(DS.body(13, 600)).padding(.top, 6)
+                    Text("Shift the episode numbers by").font(DS.body(13, 600)).padding(.top, 6)
                     TextField("0", text: $offset).keyboardType(.numbersAndPunctuation).font(DS.body(16))
                         .padding(.horizontal, 16).frame(height: 50).background(DS.surface, in: .rect(cornerRadius: DS.rCard))
-                    Text("Esempio: se l'episodio 13 qui è il primo della nuova serie, metti -12."
-                         + (episodes.count == 1 ? " L'episodio \(episodes[0].numberLabel) diventerà il \(String(format: "%g", episodes[0].number + shift))." : ""))
+                    Text(episodes.count == 1 ? "Example: if episode 13 here is the first of the new series, enter -12. Episode \(episodes[0].numberLabel) will become \(String(format: "%g", episodes[0].number + shift))."
+                                             : "Example: if episode 13 here is the first of the new series, enter -12.")
                         .font(DS.body(12)).foregroundStyle(DS.textTertiary)
                     if let error { Text(error).font(DS.body(13)).foregroundStyle(DS.pink) }
-                    Button { Task { await move(picked) } } label: { Text(busy ? "Spostamento…" : "Sposta in “\(picked.title)”") }
+                    Button { Task { await move(picked) } } label: { Text(busy ? "Moving…" : "Move to “\(picked.title)”") }
                         .buttonStyle(PrimaryButtonStyle()).disabled(busy)
-                    Button("Scegli un'altra serie") { self.picked = nil }.font(DS.body(14, 600)).tint(DS.textSecondary)
+                    Button("Choose another series") { self.picked = nil }.font(DS.body(14, 600)).tint(DS.textSecondary)
                 } else {
                     HStack(spacing: 10) {
                         Image(systemName: "magnifyingglass").foregroundStyle(DS.textTertiary)
-                        TextField("Cerca la serie giusta su AniList", text: $query).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        TextField("Find the right series on AniList", text: $query).textInputAutocapitalization(.never).autocorrectionDisabled()
                     }
                     .padding(.horizontal, 16).frame(height: 50).background(DS.surface, in: .rect(cornerRadius: 25))
                     ForEach(results) { m in
